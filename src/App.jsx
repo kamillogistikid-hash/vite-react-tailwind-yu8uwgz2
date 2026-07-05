@@ -81,7 +81,8 @@ export default function App() {
               id: it.id, penerima: it.penerima, alamat: it.alamat, kotaAsal: it.kota_asal, kotaTujuan: it.kota_tujuan,
               pembayaran: it.pembayaran, nominalCOD: it.nominal_cod, nominalDiterima: it.nominal_diterima,
               koli: it.koli, berat: it.berat, kubik: it.kubik, status: it.status,
-              fotoResiUrl: it.foto_resi_url, fotoBarangUrl: it.foto_barang_url, fotoBayarUrl: it.foto_bayar_url, catatan: it.catatan
+              fotoResiUrl: it.foto_resi_url, fotoBarangUrl: it.foto_barang_url, fotoBayarUrl: it.foto_bayar_url, catatan: it.catatan,
+              pengirim: it.pengirim
             }))
           }));
           setManifests(formattedManifests);
@@ -90,7 +91,7 @@ export default function App() {
     } catch (err) {
       console.error("Gagal terhubung ke Cloud Database:", err);
       setSystemPins({ owner: 'Kamil2026', master: '9999', admin: '1111', gudang: '2222' });
-      showToast("Koneksi gagal, silakan refresh.", "error");
+      showToast("Gagal mengambil data Cloud.", "error");
     }
     setDbLoading(false);
   };
@@ -135,7 +136,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 flex-col text-center">
         <Loader2 size={48} className="text-[#2596be] animate-spin mb-4" />
-        <h2 className="text-2xl font-bold text-slate-800">Menyinkronkan Cloud...</h2>
+        <h2 className="text-2xl font-bold text-slate-800">Menghubungkan ke Cloud...</h2>
         <p className="text-slate-500 font-medium">Kamil Logistik Server</p>
       </div>
     );
@@ -379,23 +380,26 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
 }
 
 // ==========================================
-// 2. ADMIN VIEW (PENCARIAN, KOTA ASAL & TUJUAN)
+// 2. ADMIN VIEW (✅ UPDATE: 5 BOX PENCARIAN, KETERANGAN PENGIRIM, PISAH KOTA)
 // ==========================================
 function AdminView({ manifests, drivers, armadas, notifications, setNotifications, showToast, refreshData }) {
   const [showForm, setShowForm] = useState(false);
   const [newManifest, setNewManifest] = useState({ driver: '', armada: '', tujuan: '', items: [] });
-  const [newItem, setNewItem] = useState({ id: '', penerima: '', alamat: '', kotaAsal: 'Makassar', kotaTujuan: '', pembayaran: 'Lunas', nominalCOD: '', koli: '', berat: '', kubik: '' });
+  // Poin 2: newItem ditambahkan field pengirim
+  const [newItem, setNewItem] = useState({ id: '', pengirim: '', penerima: '', alamat: '', kotaAsal: 'Makassar', kotaTujuan: '', pembayaran: 'Lunas', nominalCOD: '', koli: '', berat: '', kubik: '' });
   const [isPublishing, setIsPublishing] = useState(false);
   
   const [viewPhoto, setViewPhoto] = useState(null);
   const [editingResi, setEditingResi] = useState(null);
-  const [searchQuery, setSearchQuery] = useState(''); // FITUR PENCARIAN
+
+  // Poin 1: Mengganti searchQuery tunggal dengan objek berisi 5 filter pencarian spesifik
+  const [searchFilters, setSearchFilters] = useState({ resi: '', tujuan: '', asal: '', penerima: '', pengirim: '' });
 
   const activeDrivers = drivers.filter(d => d.status === 'active');
   const activeArmadas = armadas.filter(a => a.status === 'active');
 
   const addItemToManifest = () => {
-    if(!newItem.id || !newItem.penerima) return alert("Resi dan Penerima wajib diisi!");
+    if(!newItem.id || !newItem.penerima || !newItem.pengirim) return alert("Resi, Pengirim, dan Penerima wajib diisi!");
     if ((newItem.pembayaran === 'COD (Belum Lunas)' || newItem.pembayaran === 'DP + Sisa COD') && !newItem.nominalCOD) {
       return alert("Nominal tagihan COD/DP wajib diisi!");
     }
@@ -405,12 +409,10 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
         ...newItem, 
         nominalCOD: Number(newItem.nominalCOD) || 0, nominalDiterima: 0,
         status: 'pending', fotoResiUrl: null, fotoBarangUrl: null, fotoBayarUrl: null, catatan: '', 
-        koli: Number(newItem.koli) || 1, 
-        berat: Number(newItem.berat) || 0,
-        kubik: Number(newItem.kubik) || 0 
+        koli: Number(newItem.koli) || 1, berat: Number(newItem.berat) || 0, kubik: Number(newItem.kubik) || 0 
       }] 
     });
-    setNewItem({ ...newItem, id: '', penerima: '', alamat: '', kotaTujuan: '', nominalCOD: '', koli: '', berat: '', kubik: '' });
+    setNewItem({ ...newItem, id: '', pengirim: '', penerima: '', alamat: '', kotaTujuan: '', nominalCOD: '', koli: '', berat: '', kubik: '' });
   };
 
   const handleCreateManifest = async () => {
@@ -428,14 +430,14 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 
       if (!resMnf.ok) throw new Error("Gagal menyimpan ke tabel manifests");
 
+      // Poin 2: Ditambahkan kolom pengirim pada bulk insert ke database Cloud
       const dbItems = newManifest.items.map(it => ({
-        id: it.id, manifest_id: manifestId, penerima: it.penerima, alamat: it.alamat,
+        id: it.id, manifest_id: manifestId, pengirim: it.pengirim, penerima: it.penerima, alamat: it.alamat,
         kota_asal: it.kotaAsal, kota_tujuan: it.kotaTujuan, pembayaran: it.pembayaran,
         nominal_cod: it.nominalCOD, nominal_diterima: 0, koli: it.koli, berat: it.berat, kubik: it.kubik, status: 'pending'
       }));
 
       let resItm = await fetch(`${supabaseUrl}/items`, { method: 'POST', headers, body: JSON.stringify(dbItems) });
-
       if (!resItm.ok) throw new Error("Gagal menyimpan Daftar Resi/Items");
 
       showToast("Manifest diterbitkan & disinkron ke Cloud!");
@@ -470,6 +472,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
   const handleSaveEditResi = async () => {
     try {
       const payload = {
+        pengirim: editingResi.pengirim,
         penerima: editingResi.penerima,
         koli: Number(editingResi.koli),
         berat: Number(editingResi.berat),
@@ -483,10 +486,10 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
   };
 
   const handleBackup = () => {
-    let csv = "ID Manifest,Tanggal,Tujuan,Driver,Armada,Status Truk,ID Resi,Kota Asal,Kota Tujuan,Penerima,Alamat,Muatan (Koli/Kg),Status Resi,Pembayaran,Tagihan COD\n";
+    let csv = "ID Manifest,Tanggal,Tujuan,Driver,Armada,Status Truk,ID Resi,Pengirim,Penerima,Alamat,Kota Asal,Kota Tujuan,Muatan (Koli/Kg),Status Resi,Pembayaran,Tagihan COD\n";
     manifests.forEach(m => {
       m.items.forEach(it => {
-        csv += `"${m.id}","${new Date().toLocaleDateString('id-ID')}","${m.tujuan}","${m.driver}","${m.armada}","${m.status}","${it.id}","${it.kotaAsal}","${it.kotaTujuan}","${it.penerima}","${it.alamat}","${it.koli} Koli / ${it.berat} Kg","${it.status}","${it.pembayaran}","${it.nominalCOD}"\n`;
+        csv += `"${m.id}","${new Date().toLocaleDateString('id-ID')}","${m.tujuan}","${m.driver}","${m.armada}","${m.status}","${it.id}","${it.pengirim || ''}","${it.penerima}","${it.alamat}","${it.kotaAsal}","${it.kotaTujuan}","${it.koli} Koli / ${it.berat} Kg","${it.status}","${it.pembayaran}","${it.nominalCOD}"\n`;
       });
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -498,21 +501,19 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
     showToast("Data diekspor ke CSV!");
   };
 
-  // LOGIKA PENCARIAN (Saring Berdasarkan Kata Kunci)
+  // Poin 1: Logika Pemrosesan Multi-Pencarian Spesifik (Bisa diisi satu, sebagian, atau semuanya)
   const filteredManifests = manifests.map(mnf => {
-    if (!searchQuery) return mnf;
-    const lowerQuery = searchQuery.toLowerCase();
-    const matchesMnf = mnf.id.toLowerCase().includes(lowerQuery) || mnf.tujuan.toLowerCase().includes(lowerQuery);
-    
-    const filteredItems = mnf.items.filter(it => 
-      matchesMnf || 
-      it.id.toLowerCase().includes(lowerQuery) ||
-      it.penerima.toLowerCase().includes(lowerQuery) ||
-      it.kotaAsal.toLowerCase().includes(lowerQuery) ||
-      it.kotaTujuan.toLowerCase().includes(lowerQuery)
-    );
+    const filteredItems = mnf.items.filter(it => {
+      const matchResi = !searchFilters.resi || it.id.toLowerCase().includes(searchFilters.resi.toLowerCase());
+      const matchTujuan = !searchFilters.tujuan || it.kotaTujuan.toLowerCase().includes(searchFilters.tujuan.toLowerCase()) || mnf.tujuan.toLowerCase().includes(searchFilters.tujuan.toLowerCase());
+      const matchAsal = !searchFilters.asal || it.kotaAsal.toLowerCase().includes(searchFilters.asal.toLowerCase());
+      const matchPenerima = !searchFilters.penerima || it.penerima.toLowerCase().includes(searchFilters.penerima.toLowerCase());
+      const matchPengirim = !searchFilters.pengirim || (it.pengirim && it.pengirim.toLowerCase().includes(searchFilters.pengirim.toLowerCase()));
+      
+      return matchResi && matchTujuan && matchAsal && matchPenerima && matchPengirim;
+    });
     return { ...mnf, items: filteredItems };
-  }).filter(mnf => mnf.items.length > 0 || mnf.id.toLowerCase().includes(searchQuery.toLowerCase()));
+  }).filter(mnf => mnf.items.length > 0 || (searchFilters.resi === '' && searchFilters.tujuan === '' && searchFilters.asal === '' && searchFilters.penerima === '' && searchFilters.pengirim === '' && mnf.id.toLowerCase().includes(searchFilters.resi.toLowerCase())));
 
   return (
     <div className="space-y-6 print:space-y-12">
@@ -528,25 +529,24 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
         </div>
       )}
 
-      {/* HEADER DENGAN FITUR PENCARIAN */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-        <h2 className="text-xl font-bold text-slate-800 flex-shrink-0">Manifest Cloud</h2>
-        <div className="flex-1 w-full relative">
-          <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-          <input 
-            type="text" 
-            placeholder="Cari No. Resi, Penerima, Kota..." 
-            className="w-full border-2 border-slate-200 py-2 pl-10 pr-4 rounded-lg focus:border-[#2596be] outline-none text-sm"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-        <div className="flex gap-2 w-full md:w-auto">
-          <button onClick={handleBackup} className="flex-1 md:flex-none bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-sm font-bold text-sm transition">
-            <Download size={18} /> Backup
+      {/* Poin 1: PANEL INTERFACE KOTAK PENCARIAN MULTI-SPESIFIK (GRID 5 KOLOM) */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4 print:hidden">
+        <div className="flex justify-between items-center border-b pb-2">
+          <h2 className="text-sm font-bold text-slate-700 flex items-center gap-1"><Search size={16}/> Saring Pencarian Operasional (Multi-Field)</h2>
+          <button onClick={handleBackup} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm font-bold text-xs transition">
+            <Download size={14} /> Backup Excel
           </button>
-          <button onClick={() => setShowForm(!showForm)} className="flex-1 md:flex-none bg-[#2596be] hover:bg-[#1e7a9c] text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-sm font-bold text-sm transition">
-            {showForm ? 'Batal' : <><Plus size={18} /> Buat Manifest</>}
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
+          <div className="relative"><input type="text" placeholder="No. Resi" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.resi} onChange={e => setSearchFilters({...searchFilters, resi: e.target.value})} /></div>
+          <div className="relative"><input type="text" placeholder="Kota Asal" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.asal} onChange={e => setSearchFilters({...searchFilters, asal: e.target.value})} /></div>
+          <div className="relative"><input type="text" placeholder="Kota Tujuan" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.tujuan} onChange={e => setSearchFilters({...searchFilters, tujuan: e.target.value})} /></div>
+          <div className="relative"><input type="text" placeholder="Nama Pengirim" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.pengirim} onChange={e => setSearchFilters({...searchFilters, pengirim: e.target.value})} /></div>
+          <div className="relative"><input type="text" placeholder="Nama Penerima" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.penerima} onChange={e => setSearchFilters({...searchFilters, penerima: e.target.value})} /></div>
+        </div>
+        <div className="flex justify-end pt-1">
+          <button onClick={() => setShowForm(!showForm)} className="bg-[#2596be] hover:bg-[#1e7a9c] text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm font-bold text-sm transition">
+            {showForm ? 'Batal' : <><Plus size={18} /> Buat Manifest Baru</>}
           </button>
         </div>
       </div>
@@ -564,9 +564,14 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
           </div>
           
           <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-4">
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+            {/* Poin 2: Menambahkan input pengirim ke baris pembuatan resi */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="No Resi" value={newItem.id} onChange={e => setNewItem({...newItem, id: e.target.value})} />
+              <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Nama Pengirim" value={newItem.pengirim} onChange={e => setNewItem({...newItem, pengirim: e.target.value})} />
               <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Nama Penerima" value={newItem.penerima} onChange={e => setNewItem({...newItem, penerima: e.target.value})} />
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Kota Asal" value={newItem.kotaAsal} onChange={e => setNewItem({...newItem, kotaAsal: e.target.value})} />
               <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Kota Tujuan" value={newItem.kotaTujuan} onChange={e => setNewItem({...newItem, kotaTujuan: e.target.value})} />
               <select className="border p-2.5 rounded-lg text-sm font-semibold" value={newItem.pembayaran} onChange={e => setNewItem({...newItem, pembayaran: e.target.value, nominalCOD: ''})}>
@@ -597,7 +602,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
             {newManifest.items.map((it, idx) => (
               <div key={idx} className="text-sm bg-white p-3 rounded-lg border border-slate-200 mb-2 flex justify-between items-center shadow-sm">
                 <div>
-                  <span className="font-bold">{it.id}</span> - {it.penerima} | <span className="font-semibold text-[#2596be]">{it.koli} Koli / {it.berat} Kg</span>
+                  <span className="font-bold">{it.id}</span> - Pengirim: <span className="font-bold text-amber-700">{it.pengirim}</span> ➔ Penerima: <span className="font-bold">{it.penerima}</span> | <span className="font-semibold text-[#2596be]">{it.koli} Koli / {it.berat} Kg</span>
                   <div className="text-xs text-slate-500">{it.kotaAsal} ➔ {it.kotaTujuan}</div>
                   {it.nominalCOD > 0 && <p className="text-red-600 font-bold text-xs mt-1">Tagihan: {formatRp(it.nominalCOD)}</p>}
                 </div>
@@ -616,7 +621,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
         </div>
       )}
 
-      {/* MANIFEST LIST DENGAN KOLOM RUTE DAERAH (KOTA ASAL & TUJUAN) */}
+      {/* MANIFEST LIST UTAMA */}
       <div className="grid gap-6 print:block print:space-y-12">
         {filteredManifests.length === 0 && <div className="text-center text-slate-400 py-10 font-medium">Tidak ada data Manifest yang cocok</div>}
         {filteredManifests.map(mnf => (
@@ -652,8 +657,12 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
                 <thead>
                   <tr className="bg-slate-100 text-slate-600 border-b print:border-black print:bg-gray-200">
                     <th className="p-3 font-semibold">No. Resi</th>
+                    {/* Poin 2: Menambahkan Th Pengirim */}
+                    <th className="p-3 font-semibold">Pengirim</th>
                     <th className="p-3 font-semibold">Penerima & Alamat</th>
-                    <th className="p-3 font-semibold">Rute Daerah</th>
+                    {/* Poin 3: Memisahkan Th Kota Asal & Tujuan */}
+                    <th className="p-3 font-semibold">Kota Asal</th>
+                    <th className="p-3 font-semibold">Kota Tujuan</th>
                     <th className="p-3 text-center font-semibold">Muatan</th>
                     <th className="p-3 text-center font-semibold">Status & Bukti Foto</th>
                     <th className="p-3 text-center font-semibold print:hidden">Aksi</th>
@@ -667,12 +676,19 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
                         <div className="text-[10px] font-bold mt-1 print:border print:border-black print:px-1 print:inline-block">{it.pembayaran}</div>
                         {it.nominalCOD > 0 && <div className="text-[10px] font-bold mt-1 text-red-600">Tagih: {formatRp(it.nominalCOD)}</div>}
                       </td>
+                      {/* Poin 2: Menampilkan data Td Pengirim */}
+                      <td className="p-3 print:border-r print:border-black font-semibold text-amber-800">
+                        {it.pengirim || '-'}
+                      </td>
                       <td className="p-3 print:border-r print:border-black">
                         <strong>{it.penerima}</strong><div className="text-xs text-slate-500">{it.alamat}</div>
                       </td>
-                      <td className="p-3 print:border-r print:border-black">
-                        <div className="font-bold text-slate-800">{it.kotaAsal}</div>
-                        <div className="text-xs text-slate-500">ke {it.kotaTujuan}</div>
+                      {/* Poin 3: Memisahkan Td Kota Asal dan Tujuan */}
+                      <td className="p-3 print:border-r print:border-black font-bold text-slate-700">
+                        {it.kotaAsal}
+                      </td>
+                      <td className="p-3 print:border-r print:border-black font-bold text-slate-700">
+                        {it.kotaTujuan}
                       </td>
                       <td className="p-3 text-center print:border-r print:border-black"><div className="font-bold">{it.koli} Koli</div><div className="text-xs text-[#2596be] font-bold">{it.berat} Kg</div></td>
                       <td className="p-3 print:w-32 print:text-center">
@@ -691,7 +707,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
                       </td>
                       <td className="p-3 text-center print:hidden">
                          <div className="flex items-center justify-center gap-2">
-                           <button onClick={() => setEditingResi({id: it.id, penerima: it.penerima, koli: it.koli, berat: it.berat, nominal_cod: it.nominalCOD, pembayaran: it.pembayaran})} className="text-blue-500 hover:text-blue-700 p-1 bg-blue-50 rounded"><Edit2 size={14}/></button>
+                           <button onClick={() => setEditingResi({id: it.id, pengirim: it.pengirim || '', penerima: it.penerima, koli: it.koli, berat: it.berat, nominal_cod: it.nominalCOD, pembayaran: it.pembayaran})} className="text-blue-500 hover:text-blue-700 p-1 bg-blue-50 rounded"><Edit2 size={14}/></button>
                            <button onClick={() => handleDeleteItem(it.id)} className="text-red-500 hover:text-red-700 p-1 bg-red-50 rounded"><Trash2 size={14}/></button>
                          </div>
                       </td>
@@ -707,11 +723,14 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
       {/* POPUP EDIT RESI */}
       {editingResi && (
         <div className="fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl border-t-8 border-[#2596be]">
+          <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl border-t-8 border-t-[#2596be]">
             <h3 className="font-bold text-lg border-b pb-2 mb-4">Edit Data Resi: {editingResi.id}</h3>
             <div className="space-y-3">
+              {/* Poin 2: Ditambahkan edit pengirim */}
+              <div><label className="text-xs font-bold text-gray-500">Nama Pengirim</label>
+              <input className="w-full border p-2 rounded focus:border-[#2596be] outline-none" value={editingResi.pengirim} onChange={e=>setEditingResi({...editingResi, pengirim: e.target.value})}/></div>
               <div><label className="text-xs font-bold text-gray-500">Nama Penerima</label>
-              <input className="w-full border p-2 rounded focus:border-[#2596be]" value={editingResi.penerima} onChange={e=>setEditingResi({...editingResi, penerima: e.target.value})}/></div>
+              <input className="w-full border p-2 rounded focus:border-[#2596be] outline-none" value={editingResi.penerima} onChange={e=>setEditingResi({...editingResi, penerima: e.target.value})}/></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs font-bold text-gray-500">Koli</label><input type="number" className="w-full border p-2 rounded" value={editingResi.koli} onChange={e=>setEditingResi({...editingResi, koli: e.target.value})}/></div>
                 <div><label className="text-xs font-bold text-gray-500">Berat (Kg)</label><input type="number" className="w-full border p-2 rounded" value={editingResi.berat} onChange={e=>setEditingResi({...editingResi, berat: e.target.value})}/></div>
@@ -746,7 +765,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 }
 
 // ==========================================
-// 3. GUDANG VIEW (KOREKSI AUTO-HILANG SAAT DIBERANGKATKAN)
+// 3. GUDANG VIEW (✅ KOREKSI AUTO-HILANG SAAT BERANGKAT)
 // ==========================================
 function GudangView({ manifests, addNotification, showToast, refreshData }) {
   const loadingManifests = manifests.filter(m => m.status === 'loading');
@@ -754,7 +773,7 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
   const dispatchManifest = async (manifestId) => {
     try {
       await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'on_delivery' }) });
-      showToast("Truk diberangkatkan! Data dipindah ke Driver."); 
+      showToast("Truk berhasil diberangkatkan! Data dipindah ke Driver."); 
       refreshData();
     } catch(err) { alert("Gagal koneksi ke Cloud."); }
   };
@@ -799,7 +818,7 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
 }
 
 // ==========================================
-// 4. DRIVER VIEW (DIWAJIBKAN FOTO RESI & BARANG)
+// 4. DRIVER VIEW (KEWAJIBAN UPLOAD FOTO)
 // ==========================================
 function DriverView({ manifests, activeDriver, showToast, refreshData }) {
   const [selectedItem, setSelectedItem] = useState(null);
@@ -890,7 +909,7 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
   const updateItemStatus = async (manifestId, itemId, newStatus) => {
     const isCOD = selectedItem.item.pembayaran.includes('COD');
     
-    // VALIDASI WAJIB FOTO SAAT "SELESAI/DITERIMA"
+    // Poin 2: Proteksi Validasi Foto Wajib Sebelum Selesai/Delivered
     if (newStatus === 'delivered') {
       if (!fotoResi || !fotoBarang) {
         return alert("GAGAL! Anda WAJIB mengambil Foto Resi dan Foto Barang sebelum menyelesaikan tugas.");
@@ -910,7 +929,7 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
     };
 
     try {
-      showToast("Mengunggah data & foto...", "success");
+      showToast("Mengunggah bukti ke Cloud...", "success");
       await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, { method: 'PATCH', headers, body: JSON.stringify(updatePayload) });
       
       const originalMnf = manifests.find(m => m.id === manifestId);
