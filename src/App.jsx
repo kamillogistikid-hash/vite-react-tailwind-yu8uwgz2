@@ -22,7 +22,7 @@ const formatRp = (angka) => {
   return new Intl.NumberFormat('id-ID', { style: 'currency', currency: 'IDR', minimumFractionDigits: 0 }).format(angka || 0);
 };
 
-// --- BRANDING COMPONENT (JALAN RAHASIA SUPER ADMIN) ---
+// --- BRANDING COMPONENT ---
 const BrandLogo = ({ isLarge = false, onClick }) => (
   <div onClick={onClick} className={`flex items-center justify-center ${isLarge ? 'mb-6' : ''} ${onClick ? 'cursor-pointer' : ''}`}>
     <img 
@@ -57,65 +57,56 @@ export default function App() {
     try {
       // 1. Ambil PIN Keamanan
       let resPin = await fetch(`${supabaseUrl}/system_pins`, { headers });
-      let dataPin = await resPin.json();
-      
-      const pinMap = {};
-      if (dataPin && dataPin.length > 0) {
-        dataPin.forEach(p => pinMap[p.role] = p.pin);
-        setSystemPins(pinMap);
+      if (resPin.ok) {
+        let dataPin = await resPin.json();
+        const pinMap = {};
+        if (dataPin && dataPin.length > 0) {
+          dataPin.forEach(p => pinMap[p.role] = p.pin);
+          setSystemPins(pinMap);
+        } else {
+          setSystemPins({ owner: 'Kamil2026', master: '9999', admin: '1111', gudang: '2222' });
+        }
       } else {
-        // FALLBACK: Jika Supabase kosong/tergembok, pakai data cadangan
-        console.warn("Data PIN kosong, menggunakan sistem cadangan.");
         setSystemPins({ owner: 'Kamil2026', master: '9999', admin: '1111', gudang: '2222' });
       }
 
       // 2. Ambil Data Supir
       let resDrv = await fetch(`${supabaseUrl}/drivers`, { headers });
-      let dataDrv = await resDrv.json();
-      if (dataDrv && dataDrv.length > 0) {
-        setDrivers(dataDrv);
-      } else {
-        setDrivers([
-          { id: 'DRV-1001', name: 'Budi Santoso', phone: '08123456789', status: 'active', pin: '1234' }
-        ]);
+      if (resDrv.ok) {
+        let dataDrv = await resDrv.json();
+        if (dataDrv && dataDrv.length > 0) setDrivers(dataDrv);
       }
 
       // 3. Ambil Data Armada
       let resArm = await fetch(`${supabaseUrl}/armadas`, { headers });
-      let dataArm = await resArm.json();
-      if (dataArm && dataArm.length > 0) {
-        setArmadas(dataArm);
-      } else {
-        setArmadas([
-          { id: 'ARM-2001', plat: 'DD 1234 XYZ', type: 'Engkel Box', status: 'active' }
-        ]);
+      if (resArm.ok) {
+        let dataArm = await resArm.json();
+        if (dataArm && dataArm.length > 0) setArmadas(dataArm);
       }
 
       // 4. Ambil Manifest & Relasi Items (Resi)
       let resMnf = await fetch(`${supabaseUrl}/manifests?select=*,items(*)&order=created_at.desc`, { headers });
-      let dataMnf = await resMnf.json();
-      
-      // Mapping dari database (snake_case) ke format frontend (camelCase)
-      if (dataMnf && dataMnf.length > 0 && !dataMnf.error) {
-        const formattedManifests = dataMnf.map(m => ({
-          id: m.id, driver: m.driver, armada: m.armada, tujuan: m.tujuan, status: m.status,
-          items: (m.items || []).map(it => ({
-            id: it.id, penerima: it.penerima, alamat: it.alamat, kotaAsal: it.kota_asal, kotaTujuan: it.kota_tujuan,
-            pembayaran: it.pembayaran, nominalCOD: it.nominal_cod, nominalDiterima: it.nominal_diterima,
-            koli: it.koli, berat: it.berat, kubik: it.kubik, status: it.status,
-            fotoResiUrl: it.foto_resi_url, fotoBarangUrl: it.foto_barang_url, fotoBayarUrl: it.foto_bayar_url, catatan: it.catatan
-          }))
-        }));
-        setManifests(formattedManifests);
-      } else {
-        setManifests([]);
+      if (resMnf.ok) {
+        let dataMnf = await resMnf.json();
+        if (dataMnf && dataMnf.length > 0 && !dataMnf.error) {
+          const formattedManifests = dataMnf.map(m => ({
+            id: m.id, driver: m.driver, armada: m.armada, tujuan: m.tujuan, status: m.status,
+            items: (m.items || []).map(it => ({
+              id: it.id, penerima: it.penerima, alamat: it.alamat, kotaAsal: it.kota_asal, kotaTujuan: it.kota_tujuan,
+              pembayaran: it.pembayaran, nominalCOD: it.nominal_cod, nominalDiterima: it.nominal_diterima,
+              koli: it.koli, berat: it.berat, kubik: it.kubik, status: it.status,
+              fotoResiUrl: it.foto_resi_url, fotoBarangUrl: it.foto_barang_url, fotoBayarUrl: it.foto_bayar_url, catatan: it.catatan
+            }))
+          }));
+          setManifests(formattedManifests);
+        } else {
+          setManifests([]);
+        }
       }
     } catch (err) {
       console.error("Gagal terhubung ke Cloud Database:", err);
-      // Fallback Data darurat jika internet putus
       setSystemPins({ owner: 'Kamil2026', master: '9999', admin: '1111', gudang: '2222' });
-      setDrivers([{ id: 'DRV-1001', name: 'Budi Santoso', phone: '08123456789', status: 'active', pin: '1234' }]);
-      showToast("Gagal mengambil data Cloud, beralih ke Mode Offline / Cadangan.", "error");
+      showToast("Gagal menyinkronkan data Cloud terbaru.", "error");
     }
     setDbLoading(false);
   };
@@ -172,8 +163,6 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 relative">
         <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full border-t-8 border-[#2596be]">
-          
-          {/* Jalan Rahasia Super Admin (Klik Logo) */}
           <BrandLogo isLarge={true} onClick={() => handleProceedToPin('owner')} />
 
           {loginStep === 0 ? (
@@ -247,7 +236,7 @@ export default function App() {
 }
 
 // ==========================================
-// 0. OWNER VIEW (SUPER ADMIN PANEL LIVE)
+// 0. OWNER VIEW
 // ==========================================
 function OwnerView({ systemPins, showToast, refreshData }) {
   const [editingRole, setEditingRole] = useState(null);
@@ -263,14 +252,18 @@ function OwnerView({ systemPins, showToast, refreshData }) {
     if (newPin.length < 4) return alert("Sandi atau PIN minimal 4 karakter!");
     setIsSaving(true);
     try {
-      await fetch(`${supabaseUrl}/system_pins?role=eq.${roleKey}`, {
+      let res = await fetch(`${supabaseUrl}/system_pins?role=eq.${roleKey}`, {
         method: 'PATCH', headers, body: JSON.stringify({ pin: newPin })
       });
+      if (!res.ok) {
+        let errJson = await res.json();
+        throw new Error(errJson.message || "Gagal simpan.");
+      }
       showToast(`Akses untuk ${roleKey.toUpperCase()} berhasil diperbarui di Cloud!`);
       refreshData();
       setEditingRole(null);
     } catch(err) {
-      alert("Gagal menyimpan ke Cloud");
+      alert("Gagal menyimpan ke Cloud: " + err.message);
     }
     setIsSaving(false);
   };
@@ -331,7 +324,7 @@ function OwnerView({ systemPins, showToast, refreshData }) {
 }
 
 // ==========================================
-// 1. MASTER VIEW (LIVE DB WRITE)
+// 1. MASTER VIEW
 // ==========================================
 function MasterView({ drivers, armadas, showToast, refreshData }) {
   const [showFormDriver, setShowFormDriver] = useState(false);
@@ -341,20 +334,23 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
 
   const toggleDriverStatus = async (id, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    await fetch(`${supabaseUrl}/drivers?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
+    let res = await fetch(`${supabaseUrl}/drivers?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
+    if (!res.ok) return alert("Gagal memperbarui status Supir di Cloud.");
     showToast("Status driver diupdate ke Cloud"); refreshData();
   };
 
   const toggleArmadaStatus = async (id, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    await fetch(`${supabaseUrl}/armadas?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
+    let res = await fetch(`${supabaseUrl}/armadas?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
+    if (!res.ok) return alert("Gagal memperbarui status Armada di Cloud.");
     showToast("Status armada diupdate ke Cloud"); refreshData();
   };
 
   const handleAddDriver = async () => {
     if (!newDriver.name || !newDriver.pin) return alert("Nama dan PIN wajib diisi!");
     const id = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
-    await fetch(`${supabaseUrl}/drivers`, { method: 'POST', headers, body: JSON.stringify({ id, name: newDriver.name, phone: newDriver.phone, pin: newDriver.pin, status: 'active' }) });
+    let res = await fetch(`${supabaseUrl}/drivers`, { method: 'POST', headers, body: JSON.stringify({ id, name: newDriver.name, phone: newDriver.phone, pin: newDriver.pin, status: 'active' }) });
+    if (!res.ok) return alert("Gagal menambahkan Supir ke Cloud. Periksa apakah ID/Nama sudah ada.");
     setNewDriver({ name: '', phone: '', pin: '' }); setShowFormDriver(false);
     showToast("Supir baru tersimpan di Cloud!"); refreshData();
   };
@@ -362,7 +358,8 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
   const handleAddArmada = async () => {
     if (!newArmada.plat) return alert("Plat Nomor wajib diisi!");
     const id = `ARM-${Math.floor(1000 + Math.random() * 9000)}`;
-    await fetch(`${supabaseUrl}/armadas`, { method: 'POST', headers, body: JSON.stringify({ id, plat: newArmada.plat.toUpperCase(), type: newArmada.type, status: 'active' }) });
+    let res = await fetch(`${supabaseUrl}/armadas`, { method: 'POST', headers, body: JSON.stringify({ id, plat: newArmada.plat.toUpperCase(), type: newArmada.type, status: 'active' }) });
+    if (!res.ok) return alert("Gagal menambahkan Armada ke Cloud. Periksa Plat Nomor.");
     setNewArmada({ plat: '', type: 'Pick Up' }); setShowFormArmada(false);
     showToast("Armada baru tersimpan di Cloud!"); refreshData();
   };
@@ -441,7 +438,7 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
 }
 
 // ==========================================
-// 2. ADMIN VIEW (LIVE DB WRITE)
+// 2. ADMIN VIEW
 // ==========================================
 function AdminView({ manifests, drivers, armadas, notifications, setNotifications, showToast, refreshData }) {
   const [showForm, setShowForm] = useState(false);
@@ -477,29 +474,40 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
     try {
       const manifestId = `MNF-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*1000)}`;
       
-      // 1. Simpan tabel manifests
-      await fetch(`${supabaseUrl}/manifests`, {
+      // 1. Simpan ke tabel manifests
+      let resMnf = await fetch(`${supabaseUrl}/manifests`, {
         method: 'POST', headers,
         body: JSON.stringify({ id: manifestId, driver: newManifest.driver, armada: newManifest.armada, tujuan: newManifest.tujuan, status: 'loading' })
       });
 
-      // 2. Simpan tabel items (bulk insert mapping ke snake_case)
+      if (!resMnf.ok) {
+        let errData = await resMnf.json();
+        throw new Error(`Gagal menyimpan Manifest utama: ${errData.message || resMnf.statusText}`);
+      }
+
+      // 2. Simpan ke tabel items
       const dbItems = newManifest.items.map(it => ({
         id: it.id, manifest_id: manifestId, penerima: it.penerima, alamat: it.alamat,
         kota_asal: it.kotaAsal, kota_tujuan: it.kotaTujuan, pembayaran: it.pembayaran,
         nominal_cod: it.nominalCOD, nominal_diterima: 0, koli: it.koli, berat: it.berat, kubik: it.kubik, status: 'pending'
       }));
 
-      await fetch(`${supabaseUrl}/items`, {
+      let resItm = await fetch(`${supabaseUrl}/items`, {
         method: 'POST', headers, body: JSON.stringify(dbItems)
       });
+
+      if (!resItm.ok) {
+        let errData = await resItm.json();
+        throw new Error(`Gagal menyimpan Daftar Resi/Items: ${errData.message || resItm.statusText}`);
+      }
 
       showToast("Manifest diterbitkan & disinkron ke Cloud!");
       setShowForm(false);
       setNewManifest({ driver: '', armada: '', tujuan: '', items: [] });
-      refreshData();
+      await refreshData();
     } catch(err) {
-      alert("Gagal mengirim data ke Cloud.");
+      console.error(err);
+      alert(`EROR DATABASE CLOUD:\n${err.message}\n\n(Data gagal tersimpan, silakan periksa kolom tabel Supabase Anda)`);
     }
     setIsPublishing(false);
   };
@@ -584,7 +592,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
         </div>
       )}
 
-      {/* MANIFEST LIST (SIAP CETAK) */}
+      {/* MANIFEST LIST */}
       <div className="grid gap-6 print:block print:space-y-12">
         {manifests.length === 0 && <div className="text-center text-slate-400 py-10 font-medium">Belum ada Manifest di Database Cloud</div>}
         {manifests.map(mnf => (
@@ -659,7 +667,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 }
 
 // ==========================================
-// 3. GUDANG VIEW (LIVE DB WRITE)
+// 3. GUDANG VIEW
 // ==========================================
 function GudangView({ manifests, addNotification, showToast, refreshData }) {
   const loadingManifests = manifests.filter(m => m.status === 'loading');
@@ -667,9 +675,11 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
   const handleChecklist = async (manifestId, itemId, action) => {
     try {
       const newStatus = action === 'load' ? 'loaded' : 'issue';
-      await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, {
+      let res = await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, {
         method: 'PATCH', headers, body: JSON.stringify({ status: newStatus })
       });
+      if (!res.ok) throw new Error("Gagal update item di cloud.");
+
       if (action === 'issue') { 
         addNotification(`🚨 Gudang melapor: Resi ${itemId} bermasalah/kurang saat muat!`); 
         showToast("Laporan terkirim ke Admin & Cloud!", "error"); 
@@ -682,9 +692,10 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
 
   const dispatchManifest = async (manifestId) => {
     try {
-      await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, {
+      let res = await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, {
         method: 'PATCH', headers, body: JSON.stringify({ status: 'on_delivery' })
       });
+      if (!res.ok) throw new Error("Gagal berangkatkan truk.");
       showToast("Truk berhasil diberangkatkan! Status diubah di Cloud.");
       refreshData();
     } catch(err) {
@@ -734,7 +745,7 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
 }
 
 // ==========================================
-// 4. DRIVER VIEW (LIVE DB WRITE)
+// 4. DRIVER VIEW
 // ==========================================
 function DriverView({ manifests, activeDriver, showToast, refreshData }) {
   const [selectedItem, setSelectedItem] = useState(null);
@@ -757,9 +768,11 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
     };
 
     try {
-      await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, {
+      let res = await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, {
         method: 'PATCH', headers, body: JSON.stringify(updatePayload)
       });
+      if (!res.ok) throw new Error("Gagal update tugas kurir.");
+
       showToast(newStatus === 'delivered' ? 'Data berhasil masuk Cloud!' : 'Laporan Retur terkirim ke Cloud.', newStatus === 'delivered' ? 'success' : 'error');
       setSelectedItem(null); setCatatanText(''); setInputUangDiterima('');
       refreshData();
