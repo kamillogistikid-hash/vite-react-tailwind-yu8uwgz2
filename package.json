@@ -7,7 +7,9 @@
     "build": "vite build",
     "preview": "vite preview"
   },
-  "dependencies": {
+  "dependencies": {,
+    "lucide-react": "latest",
+"@supabase/supabase-js": "latest",
     "react": "^18.0.0",
     "react-dom": "^18.0.0"
   },
