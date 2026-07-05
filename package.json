@@ -12,7 +12,8 @@
     "@supabase/supabase-js": "latest",
     "lucide-react": "latest",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0"
+    "react-dom": "^18.2.0",
+    "sass": "latest"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.2.1",
