@@ -257,13 +257,13 @@ function OwnerView({ systemPins, showToast, refreshData }) {
       });
       if (!res.ok) {
         let errJson = await res.json();
-        throw new Error(errJson.message || "Gagal simpan.");
+        throw new Error(errJson.message || res.statusText);
       }
       showToast(`Akses untuk ${roleKey.toUpperCase()} berhasil diperbarui di Cloud!`);
       refreshData();
       setEditingRole(null);
     } catch(err) {
-      alert("Gagal menyimpan ke Cloud: " + err.message);
+      alert("Gagal menyimpan ke Cloud:\n" + err.message);
     }
     setIsSaving(false);
   };
@@ -334,34 +334,62 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
 
   const toggleDriverStatus = async (id, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    let res = await fetch(`${supabaseUrl}/drivers?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
-    if (!res.ok) return alert("Gagal memperbarui status Supir di Cloud.");
-    showToast("Status driver diupdate ke Cloud"); refreshData();
+    try {
+      let res = await fetch(`${supabaseUrl}/drivers?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
+      if (!res.ok) {
+        let errJson = await res.json();
+        throw new Error(errJson.message || res.statusText);
+      }
+      showToast("Status driver diupdate ke Cloud"); refreshData();
+    } catch(err) {
+      alert("Gagal memperbarui status Supir:\n" + err.message);
+    }
   };
 
   const toggleArmadaStatus = async (id, currentStatus) => {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
-    let res = await fetch(`${supabaseUrl}/armadas?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
-    if (!res.ok) return alert("Gagal memperbarui status Armada di Cloud.");
-    showToast("Status armada diupdate ke Cloud"); refreshData();
+    try {
+      let res = await fetch(`${supabaseUrl}/armadas?id=eq.${id}`, { method: 'PATCH', headers, body: JSON.stringify({ status: newStatus }) });
+      if (!res.ok) {
+        let errJson = await res.json();
+        throw new Error(errJson.message || res.statusText);
+      }
+      showToast("Status armada diupdate ke Cloud"); refreshData();
+    } catch(err) {
+      alert("Gagal memperbarui status Armada:\n" + err.message);
+    }
   };
 
   const handleAddDriver = async () => {
     if (!newDriver.name || !newDriver.pin) return alert("Nama dan PIN wajib diisi!");
     const id = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
-    let res = await fetch(`${supabaseUrl}/drivers`, { method: 'POST', headers, body: JSON.stringify({ id, name: newDriver.name, phone: newDriver.phone, pin: newDriver.pin, status: 'active' }) });
-    if (!res.ok) return alert("Gagal menambahkan Supir ke Cloud. Periksa apakah ID/Nama sudah ada.");
-    setNewDriver({ name: '', phone: '', pin: '' }); setShowFormDriver(false);
-    showToast("Supir baru tersimpan di Cloud!"); refreshData();
+    try {
+      let res = await fetch(`${supabaseUrl}/drivers`, { method: 'POST', headers, body: JSON.stringify({ id, name: newDriver.name, phone: newDriver.phone, pin: newDriver.pin, status: 'active' }) });
+      if (!res.ok) {
+        let errJson = await res.json();
+        throw new Error(errJson.message || res.statusText);
+      }
+      setNewDriver({ name: '', phone: '', pin: '' }); setShowFormDriver(false);
+      showToast("Supir baru tersimpan di Cloud!"); refreshData();
+    } catch (err) {
+      alert("Gagal menambahkan Supir ke Cloud:\n" + err.message);
+    }
   };
 
   const handleAddArmada = async () => {
     if (!newArmada.plat) return alert("Plat Nomor wajib diisi!");
     const id = `ARM-${Math.floor(1000 + Math.random() * 9000)}`;
-    let res = await fetch(`${supabaseUrl}/armadas`, { method: 'POST', headers, body: JSON.stringify({ id, plat: newArmada.plat.toUpperCase(), type: newArmada.type, status: 'active' }) });
-    if (!res.ok) return alert("Gagal menambahkan Armada ke Cloud. Periksa Plat Nomor.");
-    setNewArmada({ plat: '', type: 'Pick Up' }); setShowFormArmada(false);
-    showToast("Armada baru tersimpan di Cloud!"); refreshData();
+    try {
+      let res = await fetch(`${supabaseUrl}/armadas`, { method: 'POST', headers, body: JSON.stringify({ id, plat: newArmada.plat.toUpperCase(), type: newArmada.type, status: 'active' }) });
+      if (!res.ok) {
+        let errJson = await res.json();
+        throw new Error(errJson.message || res.statusText);
+      }
+      setNewArmada({ plat: '', type: 'Pick Up' }); setShowFormArmada(false);
+      showToast("Armada baru tersimpan di Cloud!"); refreshData();
+    } catch(err) {
+      alert("Gagal menambahkan Armada:\n" + err.message);
+    }
   };
 
   return (
@@ -474,7 +502,6 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
     try {
       const manifestId = `MNF-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*1000)}`;
       
-      // 1. Simpan ke tabel manifests
       let resMnf = await fetch(`${supabaseUrl}/manifests`, {
         method: 'POST', headers,
         body: JSON.stringify({ id: manifestId, driver: newManifest.driver, armada: newManifest.armada, tujuan: newManifest.tujuan, status: 'loading' })
@@ -482,10 +509,9 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 
       if (!resMnf.ok) {
         let errData = await resMnf.json();
-        throw new Error(`Gagal menyimpan Manifest utama: ${errData.message || resMnf.statusText}`);
+        throw new Error(`Gagal menyimpan Manifes utama: ${errData.message || resMnf.statusText}`);
       }
 
-      // 2. Simpan ke tabel items
       const dbItems = newManifest.items.map(it => ({
         id: it.id, manifest_id: manifestId, penerima: it.penerima, alamat: it.alamat,
         kota_asal: it.kotaAsal, kota_tujuan: it.kotaTujuan, pembayaran: it.pembayaran,
@@ -507,7 +533,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
       await refreshData();
     } catch(err) {
       console.error(err);
-      alert(`EROR DATABASE CLOUD:\n${err.message}\n\n(Data gagal tersimpan, silakan periksa kolom tabel Supabase Anda)`);
+      alert(`EROR DATABASE CLOUD:\n${err.message}`);
     }
     setIsPublishing(false);
   };
@@ -570,7 +596,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 
             <div className="flex gap-3">
               <input className="border p-2.5 rounded-lg text-sm w-20 border-slate-300 focus:border-[#2596be] outline-none" placeholder="Koli" type="number" value={newItem.koli} onChange={e => setNewItem({...newItem, koli: e.target.value})} />
-              <input className="border p-2.5 rounded-lg text-sm w-24 border-slate-300 focus:border-[#2596be] outline-none" placeholder="Berat" type="number" value={newItem.berat} onChange={e => setNewItem({...newItem, berat: e.target.value})} />
+              <input className="border p-2.5 rounded-lg text-sm w-24 border-slate-300 focus:border-[#2596be] outline-none" placeholder="Berat" type="number" value={newItem.berat} onChange={e => setNewItem({...newItem, berat: type === 'number' ? e.target.value : Number(e.target.value)})} />
               <input className="border p-2.5 rounded-lg text-sm flex-1 border-slate-300 focus:border-[#2596be] outline-none" placeholder="Alamat Lengkap" value={newItem.alamat} onChange={e => setNewItem({...newItem, alamat: e.target.value})} />
               <button onClick={addItemToManifest} className="bg-slate-900 hover:bg-black text-white font-bold rounded-lg p-2 px-6 transition">Tambah Resi</button>
             </div>
