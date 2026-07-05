@@ -18,7 +18,7 @@ const headers = {
 };
 
 // === 🚀 GANTI LINK INI DENGAN LINK LOGO KAMIL LOGISTIK ANDA ===
-const LOGO_PERUSAHAAN_URL = "https://drive.google.com/file/d/1_sQiRoGKuzxyMERFkDTTrnTK-FaS4YZC/view?usp=sharing";
+const LOGO_PERUSAHAAN_URL = "https://placehold.co/150x150/2596be/ffffff?text=KAMIL+LOGISTIK";
 
 // --- HELPER: FORMAT RUPIAH ---
 const formatRp = (angka) => {
