@@ -4,7 +4,7 @@ import {
   Plus, LogOut, MapPin, AlertCircle, Box, Scale, Settings, Users, 
   ShieldCheck, Edit2, Lock, ArrowLeft, Printer, AlertOctagon, Bell,
   Sparkles, Bot, Loader2, MessageSquareText, FileText, Banknote, Wallet,
-  Crown, Key, Download, Image as ImageIcon, Trash2, Search
+  Crown, Key, Download, Image as ImageIcon, Trash2
 } from 'lucide-react';
 
 // Konfigurasi Supabase REST API
@@ -81,8 +81,7 @@ export default function App() {
               id: it.id, penerima: it.penerima, alamat: it.alamat, kotaAsal: it.kota_asal, kotaTujuan: it.kota_tujuan,
               pembayaran: it.pembayaran, nominalCOD: it.nominal_cod, nominalDiterima: it.nominal_diterima,
               koli: it.koli, berat: it.berat, kubik: it.kubik, status: it.status,
-              fotoResiUrl: it.foto_resi_url, fotoBarangUrl: it.foto_barang_url, fotoBayarUrl: it.foto_bayar_url, catatan: it.catatan,
-              pengirim: it.pengirim
+              fotoResiUrl: it.foto_resi_url, fotoBarangUrl: it.foto_barang_url, fotoBayarUrl: it.foto_bayar_url, catatan: it.catatan
             }))
           }));
           setManifests(formattedManifests);
@@ -91,7 +90,7 @@ export default function App() {
     } catch (err) {
       console.error("Gagal terhubung ke Cloud Database:", err);
       setSystemPins({ owner: 'Kamil2026', master: '9999', admin: '1111', gudang: '2222' });
-      showToast("Gagal mengambil data Cloud.", "error");
+      showToast("Koneksi gagal, silakan refresh.", "error");
     }
     setDbLoading(false);
   };
@@ -136,7 +135,7 @@ export default function App() {
     return (
       <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4 flex-col text-center">
         <Loader2 size={48} className="text-[#2596be] animate-spin mb-4" />
-        <h2 className="text-2xl font-bold text-slate-800">Menghubungkan ke Cloud...</h2>
+        <h2 className="text-2xl font-bold text-slate-800">Menyinkronkan Cloud...</h2>
         <p className="text-slate-500 font-medium">Kamil Logistik Server</p>
       </div>
     );
@@ -380,26 +379,22 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
 }
 
 // ==========================================
-// 2. ADMIN VIEW (✅ UPDATE: 5 BOX PENCARIAN, KETERANGAN PENGIRIM, PISAH KOTA)
+// 2. ADMIN VIEW (FITUR HAPUS, EDIT, FOTO BAYAR)
 // ==========================================
 function AdminView({ manifests, drivers, armadas, notifications, setNotifications, showToast, refreshData }) {
   const [showForm, setShowForm] = useState(false);
   const [newManifest, setNewManifest] = useState({ driver: '', armada: '', tujuan: '', items: [] });
-  // Poin 2: newItem ditambahkan field pengirim
-  const [newItem, setNewItem] = useState({ id: '', pengirim: '', penerima: '', alamat: '', kotaAsal: 'Makassar', kotaTujuan: '', pembayaran: 'Lunas', nominalCOD: '', koli: '', berat: '', kubik: '' });
+  const [newItem, setNewItem] = useState({ id: '', penerima: '', alamat: '', kotaAsal: 'Makassar', kotaTujuan: '', pembayaran: 'Lunas', nominalCOD: '', koli: '', berat: '', kubik: '' });
   const [isPublishing, setIsPublishing] = useState(false);
   
   const [viewPhoto, setViewPhoto] = useState(null);
-  const [editingResi, setEditingResi] = useState(null);
-
-  // Poin 1: Mengganti searchQuery tunggal dengan objek berisi 5 filter pencarian spesifik
-  const [searchFilters, setSearchFilters] = useState({ resi: '', tujuan: '', asal: '', penerima: '', pengirim: '' });
+  const [editingResi, setEditingResi] = useState(null); // State untuk Edit Resi
 
   const activeDrivers = drivers.filter(d => d.status === 'active');
   const activeArmadas = armadas.filter(a => a.status === 'active');
 
   const addItemToManifest = () => {
-    if(!newItem.id || !newItem.penerima || !newItem.pengirim) return alert("Resi, Pengirim, dan Penerima wajib diisi!");
+    if(!newItem.id || !newItem.penerima) return alert("Resi dan Penerima wajib diisi!");
     if ((newItem.pembayaran === 'COD (Belum Lunas)' || newItem.pembayaran === 'DP + Sisa COD') && !newItem.nominalCOD) {
       return alert("Nominal tagihan COD/DP wajib diisi!");
     }
@@ -412,7 +407,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
         koli: Number(newItem.koli) || 1, berat: Number(newItem.berat) || 0, kubik: Number(newItem.kubik) || 0 
       }] 
     });
-    setNewItem({ ...newItem, id: '', pengirim: '', penerima: '', alamat: '', kotaTujuan: '', nominalCOD: '', koli: '', berat: '', kubik: '' });
+    setNewItem({ ...newItem, id: '', penerima: '', alamat: '', kotaTujuan: '', nominalCOD: '', koli: '', berat: '', kubik: '' });
   };
 
   const handleCreateManifest = async () => {
@@ -422,35 +417,28 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
     
     try {
       const manifestId = `MNF-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.floor(Math.random()*1000)}`;
-      
-      let resMnf = await fetch(`${supabaseUrl}/manifests`, {
+      await fetch(`${supabaseUrl}/manifests`, {
         method: 'POST', headers,
         body: JSON.stringify({ id: manifestId, driver: newManifest.driver, armada: newManifest.armada, tujuan: newManifest.tujuan, status: 'loading' })
       });
 
-      if (!resMnf.ok) throw new Error("Gagal menyimpan ke tabel manifests");
-
-      // Poin 2: Ditambahkan kolom pengirim pada bulk insert ke database Cloud
       const dbItems = newManifest.items.map(it => ({
-        id: it.id, manifest_id: manifestId, pengirim: it.pengirim, penerima: it.penerima, alamat: it.alamat,
+        id: it.id, manifest_id: manifestId, penerima: it.penerima, alamat: it.alamat,
         kota_asal: it.kotaAsal, kota_tujuan: it.kotaTujuan, pembayaran: it.pembayaran,
         nominal_cod: it.nominalCOD, nominal_diterima: 0, koli: it.koli, berat: it.berat, kubik: it.kubik, status: 'pending'
       }));
 
-      let resItm = await fetch(`${supabaseUrl}/items`, { method: 'POST', headers, body: JSON.stringify(dbItems) });
-      if (!resItm.ok) throw new Error("Gagal menyimpan Daftar Resi/Items");
+      await fetch(`${supabaseUrl}/items`, { method: 'POST', headers, body: JSON.stringify(dbItems) });
 
       showToast("Manifest diterbitkan & disinkron ke Cloud!");
       setShowForm(false);
       setNewManifest({ driver: '', armada: '', tujuan: '', items: [] });
-      await refreshData();
-    } catch(err) {
-      console.error(err);
-      alert(`GAGAL MENERBITKAN MANIFEST:\n${err.message}`);
-    }
+      refreshData();
+    } catch(err) { alert("Gagal mengirim data ke Cloud."); }
     setIsPublishing(false);
   };
 
+  // --- FITUR HAPUS MANIFEST & RESI ---
   const handleDeleteManifest = async (id) => {
     if(window.confirm(`YAKIN INGIN MENGHAPUS MANIFEST ${id}?\nSemua resi di dalamnya akan ikut terhapus permanen.`)) {
       try {
@@ -469,10 +457,10 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
     }
   };
 
+  // --- FITUR EDIT RESI ---
   const handleSaveEditResi = async () => {
     try {
       const payload = {
-        pengirim: editingResi.pengirim,
         penerima: editingResi.penerima,
         koli: Number(editingResi.koli),
         berat: Number(editingResi.berat),
@@ -486,10 +474,10 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
   };
 
   const handleBackup = () => {
-    let csv = "ID Manifest,Tanggal,Tujuan,Driver,Armada,Status Truk,ID Resi,Pengirim,Penerima,Alamat,Kota Asal,Kota Tujuan,Muatan (Koli/Kg),Status Resi,Pembayaran,Tagihan COD\n";
+    let csv = "ID Manifest,Tanggal,Tujuan,Driver,Armada,Status Truk,ID Resi,Penerima,Alamat,Muatan (Koli/Kg),Status Resi,Pembayaran,Tagihan COD\n";
     manifests.forEach(m => {
       m.items.forEach(it => {
-        csv += `"${m.id}","${new Date().toLocaleDateString('id-ID')}","${m.tujuan}","${m.driver}","${m.armada}","${m.status}","${it.id}","${it.pengirim || ''}","${it.penerima}","${it.alamat}","${it.kotaAsal}","${it.kotaTujuan}","${it.koli} Koli / ${it.berat} Kg","${it.status}","${it.pembayaran}","${it.nominalCOD}"\n`;
+        csv += `"${m.id}","${new Date().toLocaleDateString('id-ID')}","${m.tujuan}","${m.driver}","${m.armada}","${m.status}","${it.id}","${it.penerima}","${it.alamat}","${it.koli} Koli / ${it.berat} Kg","${it.status}","${it.pembayaran}","${it.nominalCOD}"\n`;
       });
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -500,20 +488,6 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
     document.body.appendChild(link); link.click(); document.body.removeChild(link);
     showToast("Data diekspor ke CSV!");
   };
-
-  // Poin 1: Logika Pemrosesan Multi-Pencarian Spesifik (Bisa diisi satu, sebagian, atau semuanya)
-  const filteredManifests = manifests.map(mnf => {
-    const filteredItems = mnf.items.filter(it => {
-      const matchResi = !searchFilters.resi || it.id.toLowerCase().includes(searchFilters.resi.toLowerCase());
-      const matchTujuan = !searchFilters.tujuan || it.kotaTujuan.toLowerCase().includes(searchFilters.tujuan.toLowerCase()) || mnf.tujuan.toLowerCase().includes(searchFilters.tujuan.toLowerCase());
-      const matchAsal = !searchFilters.asal || it.kotaAsal.toLowerCase().includes(searchFilters.asal.toLowerCase());
-      const matchPenerima = !searchFilters.penerima || it.penerima.toLowerCase().includes(searchFilters.penerima.toLowerCase());
-      const matchPengirim = !searchFilters.pengirim || (it.pengirim && it.pengirim.toLowerCase().includes(searchFilters.pengirim.toLowerCase()));
-      
-      return matchResi && matchTujuan && matchAsal && matchPenerima && matchPengirim;
-    });
-    return { ...mnf, items: filteredItems };
-  }).filter(mnf => mnf.items.length > 0 || (searchFilters.resi === '' && searchFilters.tujuan === '' && searchFilters.asal === '' && searchFilters.penerima === '' && searchFilters.pengirim === '' && mnf.id.toLowerCase().includes(searchFilters.resi.toLowerCase())));
 
   return (
     <div className="space-y-6 print:space-y-12">
@@ -529,24 +503,14 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
         </div>
       )}
 
-      {/* Poin 1: PANEL INTERFACE KOTAK PENCARIAN MULTI-SPESIFIK (GRID 5 KOLOM) */}
-      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 space-y-4 print:hidden">
-        <div className="flex justify-between items-center border-b pb-2">
-          <h2 className="text-sm font-bold text-slate-700 flex items-center gap-1"><Search size={16}/> Saring Pencarian Operasional (Multi-Field)</h2>
-          <button onClick={handleBackup} className="bg-green-600 hover:bg-green-700 text-white px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm font-bold text-xs transition">
-            <Download size={14} /> Backup Excel
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+        <h2 className="text-xl font-bold text-slate-800">Daftar Manifest Cloud</h2>
+        <div className="flex gap-2 w-full md:w-auto">
+          <button onClick={handleBackup} className="flex-1 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-sm font-bold text-sm">
+            <Download size={18} /> Backup Excel
           </button>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5">
-          <div className="relative"><input type="text" placeholder="No. Resi" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.resi} onChange={e => setSearchFilters({...searchFilters, resi: e.target.value})} /></div>
-          <div className="relative"><input type="text" placeholder="Kota Asal" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.asal} onChange={e => setSearchFilters({...searchFilters, asal: e.target.value})} /></div>
-          <div className="relative"><input type="text" placeholder="Kota Tujuan" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.tujuan} onChange={e => setSearchFilters({...searchFilters, tujuan: e.target.value})} /></div>
-          <div className="relative"><input type="text" placeholder="Nama Pengirim" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.pengirim} onChange={e => setSearchFilters({...searchFilters, pengirim: e.target.value})} /></div>
-          <div className="relative"><input type="text" placeholder="Nama Penerima" className="w-full border-2 border-slate-200 py-2 px-3 rounded-lg text-xs focus:border-[#2596be] outline-none font-semibold" value={searchFilters.penerima} onChange={e => setSearchFilters({...searchFilters, penerima: e.target.value})} /></div>
-        </div>
-        <div className="flex justify-end pt-1">
-          <button onClick={() => setShowForm(!showForm)} className="bg-[#2596be] hover:bg-[#1e7a9c] text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-sm font-bold text-sm transition">
-            {showForm ? 'Batal' : <><Plus size={18} /> Buat Manifest Baru</>}
+          <button onClick={() => setShowForm(!showForm)} className="flex-1 bg-[#2596be] hover:bg-[#1e7a9c] text-white px-4 py-2 rounded-lg flex items-center justify-center gap-2 shadow-sm font-bold text-sm">
+            {showForm ? 'Batal' : <><Plus size={18} /> Buat Manifest</>}
           </button>
         </div>
       </div>
@@ -564,16 +528,11 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
           </div>
           
           <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-4">
-            {/* Poin 2: Menambahkan input pengirim ke baris pembuatan resi */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-              <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="No Resi" value={newItem.id} onChange={e => setNewItem({...newItem, id: e.target.value})} />
-              <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Nama Pengirim" value={newItem.pengirim} onChange={e => setNewItem({...newItem, pengirim: e.target.value})} />
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+              <input className="border p-2.5 rounded-lg text-sm" placeholder="No Resi" value={newItem.id} onChange={e => setNewItem({...newItem, id: e.target.value})} />
               <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Nama Penerima" value={newItem.penerima} onChange={e => setNewItem({...newItem, penerima: e.target.value})} />
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-              <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Kota Asal" value={newItem.kotaAsal} onChange={e => setNewItem({...newItem, kotaAsal: e.target.value})} />
-              <input className="border p-2.5 rounded-lg text-sm bg-white" placeholder="Kota Tujuan" value={newItem.kotaTujuan} onChange={e => setNewItem({...newItem, kotaTujuan: e.target.value})} />
+              <input className="border p-2.5 rounded-lg text-sm" placeholder="Kota Asal" value={newItem.kotaAsal} onChange={e => setNewItem({...newItem, kotaAsal: e.target.value})} />
+              <input className="border p-2.5 rounded-lg text-sm" placeholder="Kota Tujuan" value={newItem.kotaTujuan} onChange={e => setNewItem({...newItem, kotaTujuan: e.target.value})} />
               <select className="border p-2.5 rounded-lg text-sm font-semibold" value={newItem.pembayaran} onChange={e => setNewItem({...newItem, pembayaran: e.target.value, nominalCOD: ''})}>
                 <option value="Lunas">💳 Lunas</option><option value="Invoice">📄 Invoice (B2B)</option><option value="COD (Belum Lunas)">💰 COD (Full)</option><option value="DP + Sisa COD">💵 DP + Sisa COD</option>
               </select>
@@ -591,7 +550,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 
             <div className="flex gap-3">
               <input className="border p-2.5 rounded-lg text-sm w-20" placeholder="Koli" type="number" value={newItem.koli} onChange={e => setNewItem({...newItem, koli: e.target.value})} />
-              <input className="border p-2.5 rounded-lg text-sm w-24 bg-white shadow-inner focus:border-[#2596be] outline-none" placeholder="Berat(Kg)" type="number" value={newItem.berat} onChange={e => setNewItem({...newItem, berat: e.target.value})} />
+              <input className="border p-2.5 rounded-lg text-sm w-24 bg-white focus:border-[#2596be]" placeholder="Berat(Kg)" type="number" value={newItem.berat} onChange={e => setNewItem({...newItem, berat: e.target.value})} />
               <input className="border p-2.5 rounded-lg text-sm flex-1" placeholder="Alamat Lengkap" value={newItem.alamat} onChange={e => setNewItem({...newItem, alamat: e.target.value})} />
               <button onClick={addItemToManifest} className="bg-slate-900 text-white font-bold rounded-lg p-2 px-6 hover:bg-black transition">Tambah Resi</button>
             </div>
@@ -602,8 +561,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
             {newManifest.items.map((it, idx) => (
               <div key={idx} className="text-sm bg-white p-3 rounded-lg border border-slate-200 mb-2 flex justify-between items-center shadow-sm">
                 <div>
-                  <span className="font-bold">{it.id}</span> - Pengirim: <span className="font-bold text-amber-700">{it.pengirim}</span> ➔ Penerima: <span className="font-bold">{it.penerima}</span> | <span className="font-semibold text-[#2596be]">{it.koli} Koli / {it.berat} Kg</span>
-                  <div className="text-xs text-slate-500">{it.kotaAsal} ➔ {it.kotaTujuan}</div>
+                  <span className="font-bold">{it.id}</span> - {it.penerima} | <span className="font-semibold text-[#2596be]">{it.koli} Koli / {it.berat} Kg</span>
                   {it.nominalCOD > 0 && <p className="text-red-600 font-bold text-xs mt-1">Tagihan: {formatRp(it.nominalCOD)}</p>}
                 </div>
                 <div className="flex gap-2">
@@ -617,14 +575,14 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
               </div>
             ))}
           </div>
-          <button onClick={handleCreateManifest} disabled={isPublishing} className="w-full bg-[#2596be] hover:bg-[#1e7a9c] text-white font-bold py-3.5 rounded-xl shadow-lg transition text-lg">{isPublishing ? 'Mengirim...' : 'Terbitkan Manifest & Sinkron Cloud'}</button>
+          <button onClick={handleCreateManifest} disabled={isPublishing} className="w-full bg-[#2596be] text-white font-bold py-3.5 rounded-xl shadow-lg hover:bg-[#1e7a9c] transition text-lg">{isPublishing ? 'Mengirim...' : 'Terbitkan Manifest & Sinkron Cloud'}</button>
         </div>
       )}
 
-      {/* MANIFEST LIST UTAMA */}
+      {/* MANIFEST LIST & PHOTO VIEWER */}
       <div className="grid gap-6 print:block print:space-y-12">
-        {filteredManifests.length === 0 && <div className="text-center text-slate-400 py-10 font-medium">Tidak ada data Manifest yang cocok</div>}
-        {filteredManifests.map(mnf => (
+        {manifests.length === 0 && <div className="text-center text-slate-400 py-10 font-medium">Belum ada Manifest di Database Cloud</div>}
+        {manifests.map(mnf => (
           <div key={mnf.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-t-8 border-t-[#2596be] print:shadow-none print:border-2 print:border-black print:rounded-none print:m-0 print:break-inside-avoid print:p-8">
             <div className="hidden print:flex items-center justify-between mb-8 border-b-2 border-black pb-4">
               <BrandLogo />
@@ -648,8 +606,6 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
             <div className="grid grid-cols-2 gap-4 mb-5 bg-slate-50 p-4 rounded-xl border border-slate-100 print:bg-white print:border-black print:rounded-none print:mt-4 print:mb-6">
               <div className="print:hidden"><p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Nama Supir</p><p className="font-bold text-lg text-slate-800">{mnf.driver}</p></div>
               <div className="print:hidden"><p className="text-[10px] text-slate-500 uppercase font-bold mb-1">Armada</p><p className="font-bold text-lg text-slate-800">{mnf.armada}</p></div>
-              <div className="hidden print:block text-sm"><span className="inline-block w-24">Tanggal</span>: {new Date().toLocaleDateString('id-ID')}<br/><span className="inline-block w-24">Tujuan Area</span>: <strong>{mnf.tujuan}</strong></div>
-              <div className="hidden print:block text-sm"><span className="inline-block w-24">Nama Supir</span>: {mnf.driver}<br/><span className="inline-block w-24">Armada/Plat</span>: <strong>{mnf.armada}</strong></div>
             </div>
 
             <div className="overflow-x-auto rounded-xl border border-slate-200 print:rounded-none print:border-black">
@@ -657,12 +613,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
                 <thead>
                   <tr className="bg-slate-100 text-slate-600 border-b print:border-black print:bg-gray-200">
                     <th className="p-3 font-semibold">No. Resi</th>
-                    {/* Poin 2: Menambahkan Th Pengirim */}
-                    <th className="p-3 font-semibold">Pengirim</th>
                     <th className="p-3 font-semibold">Penerima & Alamat</th>
-                    {/* Poin 3: Memisahkan Th Kota Asal & Tujuan */}
-                    <th className="p-3 font-semibold">Kota Asal</th>
-                    <th className="p-3 font-semibold">Kota Tujuan</th>
                     <th className="p-3 text-center font-semibold">Muatan</th>
                     <th className="p-3 text-center font-semibold">Status & Bukti Foto</th>
                     <th className="p-3 text-center font-semibold print:hidden">Aksi</th>
@@ -676,19 +627,8 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
                         <div className="text-[10px] font-bold mt-1 print:border print:border-black print:px-1 print:inline-block">{it.pembayaran}</div>
                         {it.nominalCOD > 0 && <div className="text-[10px] font-bold mt-1 text-red-600">Tagih: {formatRp(it.nominalCOD)}</div>}
                       </td>
-                      {/* Poin 2: Menampilkan data Td Pengirim */}
-                      <td className="p-3 print:border-r print:border-black font-semibold text-amber-800">
-                        {it.pengirim || '-'}
-                      </td>
                       <td className="p-3 print:border-r print:border-black">
-                        <strong>{it.penerima}</strong><div className="text-xs text-slate-500">{it.alamat}</div>
-                      </td>
-                      {/* Poin 3: Memisahkan Td Kota Asal dan Tujuan */}
-                      <td className="p-3 print:border-r print:border-black font-bold text-slate-700">
-                        {it.kotaAsal}
-                      </td>
-                      <td className="p-3 print:border-r print:border-black font-bold text-slate-700">
-                        {it.kotaTujuan}
+                        <strong>{it.penerima}</strong><div className="text-xs text-slate-500">{it.alamat}, {it.kotaTujuan}</div>
                       </td>
                       <td className="p-3 text-center print:border-r print:border-black"><div className="font-bold">{it.koli} Koli</div><div className="text-xs text-[#2596be] font-bold">{it.berat} Kg</div></td>
                       <td className="p-3 print:w-32 print:text-center">
@@ -707,7 +647,7 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
                       </td>
                       <td className="p-3 text-center print:hidden">
                          <div className="flex items-center justify-center gap-2">
-                           <button onClick={() => setEditingResi({id: it.id, pengirim: it.pengirim || '', penerima: it.penerima, koli: it.koli, berat: it.berat, nominal_cod: it.nominalCOD, pembayaran: it.pembayaran})} className="text-blue-500 hover:text-blue-700 p-1 bg-blue-50 rounded"><Edit2 size={14}/></button>
+                           <button onClick={() => setEditingResi({id: it.id, penerima: it.penerima, koli: it.koli, berat: it.berat, nominal_cod: it.nominalCOD, pembayaran: it.pembayaran})} className="text-blue-500 hover:text-blue-700 p-1 bg-blue-50 rounded"><Edit2 size={14}/></button>
                            <button onClick={() => handleDeleteItem(it.id)} className="text-red-500 hover:text-red-700 p-1 bg-red-50 rounded"><Trash2 size={14}/></button>
                          </div>
                       </td>
@@ -723,14 +663,11 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
       {/* POPUP EDIT RESI */}
       {editingResi && (
         <div className="fixed inset-0 z-50 bg-slate-900/80 flex items-center justify-center p-4">
-          <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl border-t-8 border-t-[#2596be]">
+          <div className="bg-white p-6 rounded-xl w-full max-w-md shadow-2xl border-t-8 border-[#2596be]">
             <h3 className="font-bold text-lg border-b pb-2 mb-4">Edit Data Resi: {editingResi.id}</h3>
             <div className="space-y-3">
-              {/* Poin 2: Ditambahkan edit pengirim */}
-              <div><label className="text-xs font-bold text-gray-500">Nama Pengirim</label>
-              <input className="w-full border p-2 rounded focus:border-[#2596be] outline-none" value={editingResi.pengirim} onChange={e=>setEditingResi({...editingResi, pengirim: e.target.value})}/></div>
               <div><label className="text-xs font-bold text-gray-500">Nama Penerima</label>
-              <input className="w-full border p-2 rounded focus:border-[#2596be] outline-none" value={editingResi.penerima} onChange={e=>setEditingResi({...editingResi, penerima: e.target.value})}/></div>
+              <input className="w-full border p-2 rounded focus:border-[#2596be]" value={editingResi.penerima} onChange={e=>setEditingResi({...editingResi, penerima: e.target.value})}/></div>
               <div className="grid grid-cols-2 gap-3">
                 <div><label className="text-xs font-bold text-gray-500">Koli</label><input type="number" className="w-full border p-2 rounded" value={editingResi.koli} onChange={e=>setEditingResi({...editingResi, koli: e.target.value})}/></div>
                 <div><label className="text-xs font-bold text-gray-500">Berat (Kg)</label><input type="number" className="w-full border p-2 rounded" value={editingResi.berat} onChange={e=>setEditingResi({...editingResi, berat: e.target.value})}/></div>
@@ -765,19 +702,14 @@ function AdminView({ manifests, drivers, armadas, notifications, setNotification
 }
 
 // ==========================================
-// 3. GUDANG VIEW (✅ KOREKSI AUTO-HILANG SAAT BERANGKAT)
+// 3. GUDANG VIEW 
 // ==========================================
 function GudangView({ manifests, addNotification, showToast, refreshData }) {
   const loadingManifests = manifests.filter(m => m.status === 'loading');
-  
   const dispatchManifest = async (manifestId) => {
-    try {
-      await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'on_delivery' }) });
-      showToast("Truk berhasil diberangkatkan! Data dipindah ke Driver."); 
-      refreshData();
-    } catch(err) { alert("Gagal koneksi ke Cloud."); }
+    await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'on_delivery' }) });
+    showToast("Truk diberangkatkan!"); refreshData();
   };
-
   const handleChecklist = async (manifestId, itemId, action) => {
     await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, { method: 'PATCH', headers, body: JSON.stringify({ status: action === 'load' ? 'loaded' : 'issue' }) });
     if (action === 'issue') addNotification(`🚨 Gudang: Resi ${itemId} bermasalah!`);
@@ -804,12 +736,12 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
                   <div className="flex justify-between mb-2"><div><p className="font-bold">{it.id}</p><p className="text-xs">{it.penerima}</p></div>
                   <div>{it.status === 'loaded' && <CheckCircle2 className="text-green-500 w-8 h-8"/>}</div></div>
                   {it.status === 'pending' && (
-                    <div className="flex gap-2 mt-3 pt-3 border-t"><button onClick={() => handleChecklist(mnf.id, it.id, 'load')} className="flex-1 bg-green-500 text-white font-bold py-2 rounded-lg text-sm flex items-center justify-center gap-1"><CheckCircle2 size={16}/> Masuk Truk</button><button onClick={() => handleChecklist(mnf.id, it.id, 'issue')} className="bg-red-100 text-red-700 font-bold py-2 px-3 rounded-lg text-sm flex gap-1"><AlertOctagon size={16}/> Lapor Kurang</button></div>
+                    <div className="flex gap-2 mt-3 pt-3 border-t"><button onClick={() => handleChecklist(mnf.id, it.id, 'load')} className="flex-1 bg-green-500 text-white font-bold py-2 rounded-lg text-sm flex justify-center gap-1"><CheckCircle2 size={16}/> Masuk Truk</button><button onClick={() => handleChecklist(mnf.id, it.id, 'issue')} className="bg-red-100 text-red-700 font-bold py-2 px-3 rounded-lg text-sm flex gap-1"><AlertOctagon size={16}/> Lapor Kurang</button></div>
                   )}
                 </div>
               ))}
             </div>
-            <div className="p-5 bg-slate-50 border-t"><button onClick={() => dispatchManifest(mnf.id)} disabled={!isReadyToDispatch} className={`w-full py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 ${isReadyToDispatch ? 'bg-orange-500 text-white shadow-lg' : 'bg-slate-300 text-slate-500'}`}><Truck size={20} /> Berangkatkan Truk</button></div>
+            <div className="p-5 bg-slate-50 border-t"><button onClick={() => dispatchManifest(mnf.id)} disabled={!isReadyToDispatch} className={`w-full py-3.5 rounded-xl font-bold flex justify-center items-center gap-2 ${isReadyToDispatch ? 'bg-orange-500 text-white' : 'bg-slate-300 text-slate-500'}`}><Truck size={20} /> Berangkatkan Truk</button></div>
           </div>
         )
       })}
@@ -818,7 +750,7 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
 }
 
 // ==========================================
-// 4. DRIVER VIEW (KEWAJIBAN UPLOAD FOTO)
+// 4. DRIVER VIEW (WATERMARK DETAIL & LOGO)
 // ==========================================
 function DriverView({ manifests, activeDriver, showToast, refreshData }) {
   const [selectedItem, setSelectedItem] = useState(null);
@@ -827,7 +759,7 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
   
   const [fotoResi, setFotoResi] = useState(null);
   const [fotoBarang, setFotoBarang] = useState(null);
-  const [fotoBayar, setFotoBayar] = useState(null);
+  const [fotoBayar, setFotoBayar] = useState(null); // Tambahan Foto Uang/Transfer COD
   const [isUploading, setIsUploading] = useState(false);
   
   const myManifests = manifests
@@ -835,11 +767,13 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
     .map(mnf => ({ ...mnf, items: mnf.items.filter(it => it.status !== 'issue' && it.status !== 'delivered' && it.status !== 'returned') }))
     .filter(mnf => mnf.items.length > 0);
 
+  // FUNGSI MEMROSES KAMERA + SATELIT NAMA JALAN + LOGO
   const processImageWatermark = async (e, setPhotoState) => {
     const file = e.target.files[0];
     if (!file) return;
     setIsUploading(true);
 
+    // 1. Dapatkan GPS & Nama Jalan dari Satelit OpenStreetMap
     let lat = 0, lon = 0;
     let alamatSatelit = "Mencari alamat lokasi...";
     
@@ -855,10 +789,11 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
              const a = data.address;
              alamatSatelit = `${a.road||''} ${a.suburb||a.village||''} ${a.city_district||a.county||''} ${a.city||a.town||''}`.trim().replace(/\s+/g, ', ');
            }
-         } catch(err) { alamatSatelit = "Nama jalan gagal dimuat"; }
-       } catch(err) { alamatSatelit = "GPS Ditolak/Sinyal Lemah"; }
+         } catch(err) { alamatSatelit = "Nama jalan gagal dimuat (Internet/Server Sibuk)"; }
+       } catch(err) { alamatSatelit = "GPS Ditolak atau Sinyal Lemah"; }
     } else { alamatSatelit = "GPS Tidak Didukung HP"; }
 
+    // 2. Gambar ke Canvas (Foto + Logo + Teks)
     const reader = new FileReader();
     reader.onload = (ev) => {
       const img = new Image();
@@ -870,32 +805,40 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
         canvas.height = img.height * scale;
         const ctx = canvas.getContext('2d');
         
+        // Gambar Foto Asli
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        
+        // Kotak Hitam Transparan Lebar di Bawah
         ctx.fillStyle = "rgba(0, 0, 0, 0.75)";
         ctx.fillRect(0, canvas.height - 130, canvas.width, 130);
         
+        // Teks Waktu & Koordinat
         ctx.fillStyle = "white";
         ctx.font = "bold 22px sans-serif";
         const timeStr = new Date().toLocaleString('id-ID');
         ctx.fillText(`Waktu: ${timeStr}`, 15, canvas.height - 90);
         
         ctx.font = "bold 16px sans-serif";
-        ctx.fillStyle = "#67e8f9"; 
+        ctx.fillStyle = "#67e8f9"; // Biru muda
         ctx.fillText(`GPS: Lat ${lat}, Long ${lon}`, 15, canvas.height - 65);
         
-        ctx.fillStyle = "#fef08a"; 
+        // Teks Alamat Lengkap
+        ctx.fillStyle = "#fef08a"; // Kuning muda
         ctx.font = "16px sans-serif";
+        // Potong alamat jika terlalu panjang agar tidak keluar batas
         const safeAlamat = alamatSatelit.length > 55 ? alamatSatelit.substring(0, 55) + '...' : alamatSatelit;
         ctx.fillText(`Lokasi: ${safeAlamat}`, 15, canvas.height - 35);
 
+        // Tempel Logo Perusahaan (Pojok Kanan Bawah)
         const logoImg = new Image();
-        logoImg.crossOrigin = "Anonymous";
+        logoImg.crossOrigin = "Anonymous"; // Agar tidak kena blokir keamanan browser
         logoImg.onload = () => {
           ctx.drawImage(logoImg, canvas.width - 110, canvas.height - 120, 100, 100);
           setPhotoState(canvas.toDataURL('image/jpeg', 0.6));
           setIsUploading(false);
         };
         logoImg.onerror = () => {
+          // Jika logo gagal dimuat (misal link mati), simpan foto tanpa logo
           setPhotoState(canvas.toDataURL('image/jpeg', 0.6));
           setIsUploading(false);
         };
@@ -908,28 +851,21 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
 
   const updateItemStatus = async (manifestId, itemId, newStatus) => {
     const isCOD = selectedItem.item.pembayaran.includes('COD');
-    
-    // Poin 2: Proteksi Validasi Foto Wajib Sebelum Selesai/Delivered
-    if (newStatus === 'delivered') {
-      if (!fotoResi || !fotoBarang) {
-        return alert("GAGAL! Anda WAJIB mengambil Foto Resi dan Foto Barang sebelum menyelesaikan tugas.");
-      }
-      if (isCOD && (!inputUangDiterima || !fotoBayar)) {
-        return alert("GAGAL! Tugas COD WAJIB menyertakan Nominal Uang dan Foto Bukti Pembayaran (Uang/Transfer).");
-      }
+    if (newStatus === 'delivered' && isCOD && (!inputUangDiterima || !fotoBayar)) {
+      return alert("Harap masukkan NOMINAL uang dan JEPRET BUKTI BAYAR (Transfer/Uang Fisik)!");
     }
 
     const updatePayload = {
       status: newStatus,
       foto_resi_url: fotoResi, 
       foto_barang_url: fotoBarang, 
-      foto_bayar_url: fotoBayar, 
+      foto_bayar_url: fotoBayar, // Bukti bayar tersimpan!
       nominal_diterima: isCOD ? Number(inputUangDiterima) : 0, 
       catatan: catatanText || (newStatus === 'delivered' ? 'Diterima dengan baik' : 'Retur/Gagal kirim') 
     };
 
     try {
-      showToast("Mengunggah bukti ke Cloud...", "success");
+      showToast("Sedang mengunggah bukti ke Cloud...", "success");
       await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, { method: 'PATCH', headers, body: JSON.stringify(updatePayload) });
       
       const originalMnf = manifests.find(m => m.id === manifestId);
@@ -985,11 +921,12 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
           <div className="bg-white w-full max-w-md rounded-2xl p-6 shadow-2xl my-auto border-t-8 border-[#2596be] mt-20">
             <h3 className="font-black text-xl mb-4 text-slate-800 border-b pb-3">Laporan: {selectedItem.item.id}</h3>
             
+            {/* TAMBAHAN KOTAK FOTO BUKTI BAYAR COD */}
             {selectedItem.item.pembayaran.includes('COD') && (
               <div className="mb-5 bg-orange-50 p-4 rounded-xl border-2 border-orange-200">
                 <h4 className="font-bold text-orange-800 flex items-center gap-2 mb-2"><Wallet size={18}/> Wajib Tagih Pelanggan</h4><p className="text-3xl font-black text-red-600 mb-4">{formatRp(selectedItem.item.nominalCOD)}</p>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Uang / Transfer Diterima (Rp):</label><input type="number" className="w-full border-2 border-orange-300 p-3 rounded-xl text-xl font-black mb-4 focus:outline-none text-slate-800" placeholder="Cth: 1500000" value={inputUangDiterima} onChange={(e) => setInputUangDiterima(e.target.value)} />
-                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Foto Bukti Uang / Struk Transfer (Wajib):</label>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5 uppercase tracking-wider">Foto Bukti Uang / Struk Transfer:</label>
                 <div className="border-2 border-dashed border-orange-400 rounded-xl p-1 text-center cursor-pointer hover:bg-orange-100 h-32 flex flex-col items-center justify-center relative bg-white overflow-hidden">
                   <input type="file" accept="image/*" capture="environment" onChange={(e) => processImageWatermark(e, setFotoBayar)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
                   {fotoBayar ? <img src={fotoBayar} className="w-full h-full object-cover rounded-lg" alt="Preview" /> : <><Banknote className="text-orange-500 w-8 h-8 mb-2" /><p className="text-xs text-orange-700 font-bold">Jepret Uang/Struk</p></>}
@@ -998,7 +935,7 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
             )}
             
             <div className="mb-5">
-              <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Foto Fisik Resi & Barang (Wajib Ada)</label>
+              <label className="block text-xs font-bold text-slate-700 mb-2 uppercase tracking-wider">Foto Fisik Resi & Barang (GPS)</label>
               <div className="grid grid-cols-2 gap-3">
                 <div className="border-2 border-dashed border-slate-300 rounded-xl p-1 text-center cursor-pointer hover:bg-slate-50 h-32 flex flex-col items-center justify-center relative bg-slate-50 overflow-hidden">
                   <input type="file" accept="image/*" capture="environment" onChange={(e) => processImageWatermark(e, setFotoResi)} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" />
