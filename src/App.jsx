@@ -973,4 +973,3 @@ function ItemStatusBadge({ status }) {
   const labels = { pending: 'Di Gudang', loaded: 'Di Truk', delivered: 'Terkirim', returned: 'Retur', issue: 'Barang Kurang' };
   return <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider print:border print:border-black print:bg-transparent print:text-black ${styles[status]}`}>{labels[status]}</span>;
 }
-
