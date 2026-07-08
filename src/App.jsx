@@ -7,7 +7,6 @@ import {
   Crown, Key, Download, Image as ImageIcon, Trash2, Search, FileSignature
 } from 'lucide-react';
 
-// Konfigurasi Supabase REST API
 const supabaseUrl = 'https://eowtwkqcuggzogzbsayn.supabase.co/rest/v1';
 const supabaseKey = 'sb_publishable_IJLF4yMmEVoA-2NasjcPBA_tEaJclm_';
 const headers = {
@@ -25,13 +24,26 @@ const formatRp = (angka) => {
 
 const BrandLogo = ({ isLarge = false, onClick }) => (
   <div onClick={onClick} className={`flex items-center justify-center ${isLarge ? 'mb-6' : ''} ${onClick ? 'cursor-pointer' : ''}`}>
-    <img 
-      src={LOGO_PERUSAHAAN_URL} 
-      alt="Kamil Logistik" 
-      className={`${isLarge ? 'h-24' : 'h-10'} object-contain rounded shadow-sm print:h-12`}
-    />
+    <img src={LOGO_PERUSAHAAN_URL} alt="Kamil Logistik" className={`${isLarge ? 'h-24' : 'h-10'} object-contain rounded shadow-sm print:h-12`} />
   </div>
 );
+
+const ConfirmModal = ({ isOpen, message, onConfirm, onCancel }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white p-6 rounded-2xl max-w-sm w-full shadow-2xl border-t-8 border-red-500 text-center">
+        <AlertOctagon className="w-16 h-16 text-red-500 mx-auto mb-4" />
+        <h3 className="text-xl font-bold text-slate-800 mb-2">Konfirmasi Tindakan</h3>
+        <p className="text-slate-600 mb-6 font-medium">{message}</p>
+        <div className="flex gap-3">
+          <button onClick={onCancel} className="flex-1 bg-slate-200 text-slate-800 font-bold py-3 rounded-xl hover:bg-slate-300 transition">Batal</button>
+          <button onClick={() => { onConfirm(); onCancel(); }} className="flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition shadow-lg shadow-red-500/30">Ya, Lanjutkan</button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export default function App() {
   const [dbLoading, setDbLoading] = useState(true);
@@ -49,6 +61,14 @@ export default function App() {
   const [armadas, setArmadas] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [toast, setToast] = useState(null);
+  
+  const [confirmState, setConfirmState] = useState({ isOpen: false, message: '', onConfirm: () => {} });
+
+  const confirmAction = (message, onConfirm) => {
+    setConfirmState({ isOpen: true, message, onConfirm });
+  };
+
+  const showToast = (message, type = 'success') => setToast({ message, type });
 
   const loadAllData = async () => {
     setDbLoading(true);
@@ -91,7 +111,6 @@ export default function App() {
         }
       }
     } catch (err) {
-      console.error("Gagal terhubung ke Cloud Database:", err);
       setSystemPins({ owner: 'Kamil2026', master: '9999', admin: '1111', gudang: '2222', admin_resi: '5555' });
       showToast("Gagal mengambil data Cloud.", "error");
     }
@@ -106,8 +125,6 @@ export default function App() {
       return () => clearTimeout(timer);
     }
   }, [toast]);
-
-  const showToast = (message, type = 'success') => setToast({ message, type });
 
   const handleProceedToPin = (selectedRole) => {
     setTempRole(selectedRole); setLoginPin('');
@@ -125,12 +142,12 @@ export default function App() {
       if (drv && drv.pin === loginPin && drv.status === 'active') {
         setActiveDriver(drv.name); setRole('driver'); setLoginStep(0);
         showToast(`Selamat bekerja, ${drv.name}!`);
-      } else alert('Gagal! PIN salah atau akun dinonaktifkan.');
+      } else showToast('Gagal! PIN salah atau akun dinonaktifkan.', 'error');
     } else {
       if (loginPin === (systemPins[tempRole] || '5555')) {
         setRole(tempRole); setLoginStep(0);
-        showToast(`Berhasil login sebagai ${tempRole}`);
-      } else alert(tempRole === 'owner' ? 'Gagal! Kata Sandi salah.' : 'Gagal! Kode Akses (PIN) salah.');
+        showToast(`Berhasil login sebagai ${tempRole.replace('_', ' ')}`);
+      } else showToast(tempRole === 'owner' ? 'Gagal! Kata Sandi salah.' : 'Gagal! Kode Akses (PIN) salah.', 'error');
     }
   };
 
@@ -191,6 +208,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 pb-10 font-sans print:bg-white print:pb-0">
+      <ConfirmModal isOpen={confirmState.isOpen} message={confirmState.message} onConfirm={confirmState.onConfirm} onCancel={() => setConfirmState({...confirmState, isOpen: false})} />
+      
       <header className={`bg-white shadow-sm sticky top-0 z-40 print:hidden border-b ${role === 'owner' ? 'border-yellow-500' : 'border-gray-200'}`}>
         <div className="max-w-5xl mx-auto px-4 py-3 flex justify-between items-center">
           <BrandLogo />
@@ -206,25 +225,22 @@ export default function App() {
 
       {toast && (
         <div className={`fixed top-20 right-4 z-50 px-4 py-3 rounded-lg shadow-lg font-semibold flex items-center gap-2 print:hidden animate-fade-in-down ${toast.type === 'success' ? 'bg-green-600 text-white' : 'bg-red-600 text-white'}`}>
-          <CheckCircle2 size={18} /> {toast.message}
+          {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />} {toast.message}
         </div>
       )}
 
       <main className="max-w-5xl mx-auto px-4 py-6 print:p-0 print:m-0">
         {role === 'owner' && <OwnerView systemPins={systemPins} showToast={showToast} refreshData={loadAllData} />}
-        {role === 'master' && <MasterView drivers={drivers} armadas={armadas} showToast={showToast} refreshData={loadAllData} />}
-        {role === 'admin_resi' && <AdminResiView manifests={manifests} availableItems={availableItems} showToast={showToast} refreshData={loadAllData} notifications={notifications} setNotifications={setNotifications} />}
-        {role === 'admin' && <AdminDispatchView manifests={manifests} availableItems={availableItems} drivers={drivers} armadas={armadas} showToast={showToast} refreshData={loadAllData} />}
-        {role === 'gudang' && <GudangView manifests={manifests} addNotification={(msg) => setNotifications([msg, ...notifications])} showToast={showToast} refreshData={loadAllData} />}
-        {role === 'driver' && <DriverView manifests={manifests} activeDriver={activeDriver} showToast={showToast} refreshData={loadAllData} />}
+        {role === 'master' && <MasterView drivers={drivers} armadas={armadas} showToast={showToast} refreshData={loadAllData} confirmAction={confirmAction} />}
+        {role === 'admin_resi' && <AdminResiView manifests={manifests} availableItems={availableItems} showToast={showToast} refreshData={loadAllData} notifications={notifications} setNotifications={setNotifications} confirmAction={confirmAction} />}
+        {role === 'admin' && <AdminDispatchView manifests={manifests} availableItems={availableItems} drivers={drivers} armadas={armadas} showToast={showToast} refreshData={loadAllData} confirmAction={confirmAction} />}
+        {role === 'gudang' && <GudangView manifests={manifests} addNotification={(msg) => setNotifications([msg, ...notifications])} showToast={showToast} refreshData={loadAllData} confirmAction={confirmAction} />}
+        {role === 'driver' && <DriverView manifests={manifests} activeDriver={activeDriver} showToast={showToast} refreshData={loadAllData} confirmAction={confirmAction} />}
       </main>
     </div>
   );
 }
 
-// ==========================================
-// 0. OWNER VIEW
-// ==========================================
 function OwnerView({ systemPins, showToast, refreshData }) {
   const [editingRole, setEditingRole] = useState(null);
   const [newPin, setNewPin] = useState('');
@@ -233,14 +249,14 @@ function OwnerView({ systemPins, showToast, refreshData }) {
   const handleEditClick = (roleKey) => { setEditingRole(roleKey); setNewPin(systemPins[roleKey] || '5555'); };
 
   const handleSavePin = async (roleKey) => {
-    if (newPin.length < 4) return alert("Sandi minimal 4 karakter!");
+    if (newPin.length < 4) return showToast("Sandi minimal 4 karakter!", "error");
     setIsSaving(true);
     try {
       await fetch(`${supabaseUrl}/system_pins?role=eq.${roleKey}`, { method: 'PATCH', headers, body: JSON.stringify({ pin: newPin }) });
       await fetch(`${supabaseUrl}/system_pins`, { method: 'POST', headers, body: JSON.stringify({ role: roleKey, pin: newPin }) });
       showToast(`Akses untuk ${roleKey.replace('_', ' ').toUpperCase()} diperbarui!`);
       refreshData(); setEditingRole(null);
-    } catch(err) { alert("Gagal menyimpan ke Cloud"); }
+    } catch(err) { showToast("Gagal menyimpan ke Cloud", "error"); }
     setIsSaving(false);
   };
 
@@ -289,10 +305,7 @@ function OwnerView({ systemPins, showToast, refreshData }) {
   );
 }
 
-// ==========================================
-// 1. MASTER VIEW
-// ==========================================
-function MasterView({ drivers, armadas, showToast, refreshData }) {
+function MasterView({ drivers, armadas, showToast, refreshData, confirmAction }) {
   const [showFormDriver, setShowFormDriver] = useState(false);
   const [newDriver, setNewDriver] = useState({ name: '', phone: '', pin: '' });
   const [showFormArmada, setShowFormArmada] = useState(false);
@@ -311,7 +324,7 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
   };
 
   const handleAddDriver = async () => {
-    if (!newDriver.name || !newDriver.pin) return alert("Nama dan PIN wajib diisi!");
+    if (!newDriver.name || !newDriver.pin) return showToast("Nama dan PIN wajib diisi!", "error");
     const id = `DRV-${Math.floor(1000 + Math.random() * 9000)}`;
     await fetch(`${supabaseUrl}/drivers`, { method: 'POST', headers, body: JSON.stringify({ id, name: newDriver.name, phone: newDriver.phone, pin: newDriver.pin, status: 'active' }) });
     setNewDriver({ name: '', phone: '', pin: '' }); setShowFormDriver(false);
@@ -319,7 +332,7 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
   };
 
   const handleAddArmada = async () => {
-    if (!newArmada.plat) return alert("Plat Nomor wajib diisi!");
+    if (!newArmada.plat) return showToast("Plat Nomor wajib diisi!", "error");
     const id = `ARM-${Math.floor(1000 + Math.random() * 9000)}`;
     await fetch(`${supabaseUrl}/armadas`, { method: 'POST', headers, body: JSON.stringify({ id, plat: newArmada.plat.toUpperCase(), type: newArmada.type, status: 'active' }) });
     setNewArmada({ plat: '', type: 'Pick Up' }); setShowFormArmada(false);
@@ -327,17 +340,17 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
   };
 
   const handleDeleteDriver = async (id) => {
-    if(window.confirm("Yakin ingin menghapus Supir ini secara permanen?")) {
+    confirmAction("Yakin ingin menghapus Supir ini secara permanen?", async () => {
       await fetch(`${supabaseUrl}/drivers?id=eq.${id}`, { method: 'DELETE', headers });
       showToast("Data Supir dihapus!"); refreshData();
-    }
+    });
   };
 
   const handleDeleteArmada = async (id) => {
-    if(window.confirm("Yakin ingin menghapus Armada ini secara permanen?")) {
+    confirmAction("Yakin ingin menghapus Armada ini secara permanen?", async () => {
       await fetch(`${supabaseUrl}/armadas?id=eq.${id}`, { method: 'DELETE', headers });
       showToast("Data Armada dihapus!"); refreshData();
-    }
+    });
   };
 
   return (
@@ -411,21 +424,17 @@ function MasterView({ drivers, armadas, showToast, refreshData }) {
   );
 }
 
-// ==========================================
-// 2A. ADMIN RESI VIEW
-// ==========================================
-function AdminResiView({ manifests, availableItems, showToast, refreshData, notifications, setNotifications }) {
+function AdminResiView({ manifests, availableItems, showToast, refreshData, notifications, setNotifications, confirmAction }) {
   const [showForm, setShowForm] = useState(false);
   const [newItem, setNewItem] = useState({ resi_manual: '', pengirim: '', penerima: '', alamat: '', kotaAsal: 'Makassar', kotaTujuan: '', pembayaran: 'Lunas', nominalCOD: '', koli: '', berat: '', kubik: '' });
-  const [newItemFotoBayar, setNewItemFotoBayar] = useState(null); // State upload foto baru
+  const [newItemFotoBayar, setNewItemFotoBayar] = useState(null); 
   const [isPublishing, setIsPublishing] = useState(false);
   
   const [viewPhoto, setViewPhoto] = useState(null);
   const [editingResi, setEditingResi] = useState(null);
-  const [editFotoBayar, setEditFotoBayar] = useState(null); // State upload foto edit
+  const [editFotoBayar, setEditFotoBayar] = useState(null);
   const [searchFilters, setSearchFilters] = useState({ resi: '', tujuan: '', asal: '', penerima: '', pengirim: '' });
 
-  // Fungsi Convert Image ke Base64 (untuk Bukti Lunas/DP Admin)
   const handleUploadFotoAdmin = (e, setTargetState) => {
     const file = e.target.files[0];
     if(!file) return;
@@ -437,11 +446,10 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
   };
 
   const handleCreateResi = async () => {
-    if(!newItem.resi_manual || !newItem.penerima || !newItem.pengirim) return alert("Resi, Pengirim, dan Penerima wajib diisi!");
-    if ((newItem.pembayaran === 'DP + Sisa COD') && !newItem.nominalCOD) return alert("Nominal tagihan sisa COD wajib diisi!");
-    // Validasi Foto Lunas / DP
+    if(!newItem.resi_manual || !newItem.penerima || !newItem.pengirim) return showToast("Resi, Pengirim, dan Penerima wajib diisi!", "error");
+    if ((newItem.pembayaran === 'DP + Sisa COD') && !newItem.nominalCOD) return showToast("Nominal tagihan sisa COD wajib diisi!", "error");
     if ((newItem.pembayaran === 'Lunas' || newItem.pembayaran === 'DP + Sisa COD') && !newItemFotoBayar) {
-       return alert("Wajib mengunggah Bukti Pembayaran / Transfer!");
+       return showToast("Wajib mengunggah Bukti Pembayaran / Transfer!", "error");
     }
     
     setIsPublishing(true);
@@ -462,7 +470,7 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
       setNewItemFotoBayar(null);
       setShowForm(false);
       refreshData();
-    } catch(e) { alert("GAGAL MENYIMPAN: " + e.message); }
+    } catch(e) { showToast("GAGAL MENYIMPAN: " + e.message, "error"); }
     setIsPublishing(false);
   };
 
@@ -478,25 +486,25 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
       showToast("Perubahan Resi Disimpan!"); 
       setEditingResi(null); setEditFotoBayar(null); 
       refreshData();
-    } catch(e) { alert("Gagal menyimpan perubahan"); }
+    } catch(e) { showToast("Gagal menyimpan perubahan", "error"); }
   };
 
   const handleDeleteItem = async (itemId) => {
-    if(window.confirm(`Hapus Resi ini permanen?`)) {
+    confirmAction(`Hapus Resi ini permanen?`, async () => {
       try {
         await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, { method: 'DELETE', headers });
         showToast("Resi dihapus!"); refreshData();
-      } catch(e) { alert("Gagal menghapus"); }
-    }
+      } catch(e) { showToast("Gagal menghapus", "error"); }
+    });
   };
 
   const handleDeleteManifestAdminResi = async (manifestId) => {
-    if(window.confirm(`YAKIN INGIN MENGHAPUS MANIFEST ${manifestId}?\nSemua data di dalamnya akan terhapus. (Gunakan untuk bersih-bersih data uji coba)`)) {
+    confirmAction(`YAKIN INGIN MENGHAPUS MANIFEST ${manifestId}?\nSemua data di dalamnya akan ikut terhapus permanen.`, async () => {
       try {
         await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, { method: 'DELETE', headers });
         showToast(`Manifest ${manifestId} berhasil dihapus!`); refreshData();
-      } catch(e) { alert("Gagal menghapus Manifest"); }
-    }
+      } catch(e) { showToast("Gagal menghapus Manifest", "error"); }
+    });
   };
 
   const handleBackup = () => {
@@ -507,7 +515,7 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
       });
     });
     availableItems.forEach(it => {
-      csv += `"${new Date().toLocaleDateString('id-ID')}","BELUM DIJADWALKAN","-","-","${it.resi_manual}","${it.pengirim || ''}","${it.penerima}","${it.alamat}","${it.kota_asal}","${it.kota_tujuan}","${it.koli} Koli / ${it.berat} Kg","${it.status}","${it.pembayaran}","${it.nominal_cod}"\n`;
+      csv += `"${new Date().toLocaleDateString('id-ID')}","BARANG DOORING","-","-","${it.resi_manual}","${it.pengirim || ''}","${it.penerima}","${it.alamat}","${it.kota_asal}","${it.kota_tujuan}","${it.koli} Koli / ${it.berat} Kg","${it.status}","${it.pembayaran}","${it.nominal_cod}"\n`;
     });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
@@ -569,7 +577,7 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
 
       {showForm && (
         <div className="bg-white p-6 rounded-xl shadow-lg border border-purple-200 print:hidden animate-fade-in-down">
-          <h3 className="font-bold text-lg border-b pb-2 mb-4 text-purple-800">Formulir Resi Baru (Menunggu Jadwal)</h3>
+          <h3 className="font-bold text-lg border-b pb-2 mb-4 text-purple-800">Formulir Resi Baru (Barang Dooring)</h3>
           <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 mb-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
               <input className="border p-2.5 rounded-lg text-sm bg-white focus:border-purple-500" placeholder="No Resi Manual" value={newItem.resi_manual} onChange={e => setNewItem({...newItem, resi_manual: e.target.value})} />
@@ -591,7 +599,6 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
               </div>
             )}
 
-            {/* AREA UPLOAD BUKTI (LUNAS / DP) */}
             {(newItem.pembayaran === 'Lunas' || newItem.pembayaran === 'DP + Sisa COD') && (
               <div className="mb-3 bg-blue-50 p-3.5 rounded-lg border border-blue-200">
                 <label className="text-xs font-bold text-blue-800 mb-2 block">Upload Bukti Pembayaran / Transfer (Wajib):</label>
@@ -615,7 +622,7 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
       {filteredAvailable.length > 0 && (
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 border-t-8 border-t-amber-400">
           <div className="flex justify-between items-center border-b pb-3 mb-4">
-            <div><h3 className="font-black text-xl uppercase tracking-wider text-slate-900">RESI MENUNGGU JADWAL TRUK</h3><p className="text-sm text-slate-500">Resi ini siap ditarik oleh Admin Dispatch ke dalam manifest.</p></div>
+            <div><h3 className="font-black text-xl uppercase tracking-wider text-slate-900">DAFTAR BARANG DOORING</h3><p className="text-sm text-slate-500">Resi ini siap ditarik oleh Admin Dispatch ke dalam manifest.</p></div>
             <span className="bg-amber-100 text-amber-800 px-3 py-1 rounded font-bold text-sm">{filteredAvailable.length} Resi Tersedia</span>
           </div>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
@@ -659,7 +666,6 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
         </div>
       )}
 
-      {/* MANIFEST LIST (ADMIN RESI BISA MENGHAPUS MANIFEST UNTUK UJI COBA) */}
       <div className="grid gap-6 print:block print:space-y-12">
         {filteredManifests.length === 0 && filteredAvailable.length === 0 && <div className="text-center text-slate-400 py-10 font-medium">Tidak ada data Laporan yang cocok</div>}
         {filteredManifests.map(mnf => (
@@ -674,7 +680,6 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
                 <StatusBadge status={mnf.status} />
                 <div className="flex gap-2 mt-2">
                   <button onClick={() => window.print()} className="text-sm bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-lg font-bold flex items-center gap-2"><Printer size={16}/> Cetak</button>
-                  {/* TOMBOL HAPUS MANIFEST KHUSUS ADMIN RESI */}
                   <button onClick={() => handleDeleteManifestAdminResi(mnf.id)} className="text-sm bg-red-100 text-red-600 hover:bg-red-200 px-4 py-2 rounded-lg font-bold flex items-center gap-2"><Trash2 size={16}/> Hapus Manifest</button>
                 </div>
               </div>
@@ -782,10 +787,7 @@ function AdminResiView({ manifests, availableItems, showToast, refreshData, noti
   );
 }
 
-// ==========================================
-// 2B. ADMIN DISPATCH VIEW (SEARCH BOX)
-// ==========================================
-function AdminDispatchView({ manifests, availableItems, drivers, armadas, showToast, refreshData }) {
+function AdminDispatchView({ manifests, availableItems, drivers, armadas, showToast, refreshData, confirmAction }) {
   const [showForm, setShowForm] = useState(false);
   const [newManifest, setNewManifest] = useState({ driver: '', armada: '', tujuan: '', items: [] });
   const [searchResiTerm, setSearchResiTerm] = useState('');
@@ -794,9 +796,8 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
   const activeDrivers = drivers.filter(d => d.status === 'active');
   const activeArmadas = armadas.filter(a => a.status === 'active');
 
-  // Filter pencarian untuk daftar tarik resi
   const filteredAvailableForTruck = availableItems.filter(it => 
-    !newManifest.items.find(i => i.id === it.id) && // Hilangkan yang sudah ditarik ke box bawah
+    !newManifest.items.find(i => i.id === it.id) &&
     (it.resi_manual.toLowerCase().includes(searchResiTerm.toLowerCase()) || 
      it.penerima.toLowerCase().includes(searchResiTerm.toLowerCase()) ||
      it.kota_tujuan.toLowerCase().includes(searchResiTerm.toLowerCase()))
@@ -804,7 +805,7 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
 
   const addResiToManifest = (item) => {
     setNewManifest({ ...newManifest, items: [...newManifest.items, item] });
-    setSearchResiTerm(''); // Reset pencarian setelah ditambah
+    setSearchResiTerm(''); 
   };
 
   const removeResiFromManifest = (id) => {
@@ -812,8 +813,8 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
   };
 
   const handleCreateManifest = async () => {
-    if(!newManifest.driver || !newManifest.armada) return alert("Pilih Driver dan Armada!");
-    if(newManifest.items.length === 0) return alert("Minimal masukkan 1 resi ke dalam truk!");
+    if(!newManifest.driver || !newManifest.armada) return showToast("Pilih Driver dan Armada!", "error");
+    if(newManifest.items.length === 0) return showToast("Minimal masukkan 1 resi ke dalam truk!", "error");
     setIsPublishing(true);
     
     try {
@@ -832,17 +833,17 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
       setShowForm(false);
       setNewManifest({ driver: '', armada: '', tujuan: '', items: [] });
       refreshData();
-    } catch(err) { alert(`GAGAL:\n${err.message}`); }
+    } catch(err) { showToast(`GAGAL:\n${err.message}`, "error"); }
     setIsPublishing(false);
   };
 
   const handleDeleteManifest = async (id) => {
-    if(window.confirm(`YAKIN INGIN MENGHAPUS MANIFEST ${id}?\nResi di dalamnya akan kembali berstatus "Menunggu Jadwal".`)) {
+    confirmAction(`YAKIN INGIN MENGHAPUS MANIFEST ${id}?\nResi di dalamnya akan kembali berstatus "Barang Dooring".`, async () => {
       try {
         await fetch(`${supabaseUrl}/manifests?id=eq.${id}`, { method: 'DELETE', headers });
         showToast("Manifest berhasil dibatalkan!"); refreshData();
-      } catch(e) { alert("Gagal menghapus"); }
-    }
+      } catch(e) { showToast("Gagal menghapus", "error"); }
+    });
   };
 
   return (
@@ -874,14 +875,13 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
           <div className="bg-blue-50 p-5 rounded-xl border border-blue-200 mb-4">
             <h4 className="font-bold text-blue-900 mb-2 flex items-center gap-2"><Search size={18}/> Cari & Tarik Resi ke dalam Truk:</h4>
             
-            {/* KOTAK PENCARIAN BARU */}
             <input type="text" placeholder="Ketik No. Resi, Nama Penerima, atau Kota Tujuan..." className="w-full border-2 border-blue-300 p-3 rounded-lg outline-none focus:border-[#2596be] font-bold text-slate-700 mb-3 shadow-inner" value={searchResiTerm} onChange={e => setSearchResiTerm(e.target.value)} />
             
             <div className="max-h-48 overflow-y-auto space-y-2 pr-2">
               {filteredAvailableForTruck.length === 0 ? (
                 <p className="text-sm text-blue-700 font-medium text-center py-4">{searchResiTerm ? 'Tidak ditemukan resi yang cocok' : 'Ketik di atas untuk mencari resi, atau tarik dari daftar ini'}</p>
               ) : (
-                filteredAvailableForTruck.slice(0, 10).map(it => ( // Batasi tampilan 10 agar tidak terlalu panjang
+                filteredAvailableForTruck.slice(0, 10).map(it => (
                   <div key={it.id} className="bg-white p-3 rounded-lg border border-blue-200 flex justify-between items-center shadow-sm">
                     <div>
                       <span className="font-bold text-[#2596be]">{it.resi_manual}</span> | {it.pengirim} ➔ <strong>{it.penerima}</strong>
@@ -911,7 +911,6 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
         </div>
       )}
 
-      {/* MANIFEST LIST UNTUK PRINT DISPATCH */}
       <div className="grid gap-6 print:block print:space-y-12">
         {manifests.length === 0 && <div className="text-center text-slate-400 py-10 font-medium">Belum ada Manifest dibuat.</div>}
         {manifests.map(mnf => (
@@ -980,26 +979,21 @@ function AdminDispatchView({ manifests, availableItems, drivers, armadas, showTo
   );
 }
 
-// ==========================================
-// 3. GUDANG VIEW 
-// ==========================================
-function GudangView({ manifests, addNotification, showToast, refreshData }) {
-  // Hanya tampilkan manifest yang statusnya 'loading'
+function GudangView({ manifests, addNotification, showToast, refreshData, confirmAction }) {
   const loadingManifests = manifests.filter(m => m.status === 'loading');
-  const [picStaff, setPicStaff] = useState({}); // Menyimpan nama PIC per manifest id
+  const [picStaff, setPicStaff] = useState({}); 
 
   const dispatchManifest = async (manifestId) => {
     const staffName = picStaff[manifestId];
     if (!staffName || staffName.trim() === '') {
-      return alert("Harap isi Nama Staff Penanggung Jawab sebelum memberangkatkan truk!");
+      return showToast("Harap isi Nama Staff Penanggung Jawab sebelum memberangkatkan truk!", "error");
     }
 
     try {
-      // Kita update status jadi on_delivery, dan tambahkan catatan PIC ke field tujuan (atau biarkan di local)
       await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, { method: 'PATCH', headers, body: JSON.stringify({ status: 'on_delivery' }) });
       showToast("Truk berhasil diberangkatkan! Manifest hilang dari layar Gudang."); 
       refreshData();
-    } catch(err) { alert("Gagal koneksi ke Cloud."); }
+    } catch(err) { showToast("Gagal koneksi ke Cloud.", "error"); }
   };
 
   const handleChecklist = async (manifestId, itemId, action) => {
@@ -1009,12 +1003,12 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
   };
 
   const handleDeleteManifestGudang = async (manifestId) => {
-    if(window.confirm(`YAKIN INGIN MENGHAPUS MANIFEST ${manifestId} DARI GUDANG?\n(Semua resi di dalamnya akan terhapus. Gunakan untuk bersihkan data dummy)`)) {
+    confirmAction(`YAKIN INGIN MENGHAPUS MANIFEST ${manifestId} DARI GUDANG?\n(Semua resi di dalamnya akan terhapus. Gunakan untuk bersihkan data dummy)`, async () => {
       try {
         await fetch(`${supabaseUrl}/manifests?id=eq.${manifestId}`, { method: 'DELETE', headers });
         showToast("Manifest Dummy dihapus!"); refreshData();
-      } catch(e) { alert("Gagal menghapus Manifest"); }
-    }
+      } catch(e) { showToast("Gagal menghapus Manifest", "error"); }
+    });
   };
 
   return (
@@ -1027,14 +1021,12 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
         </div>
       )}
       {loadingManifests.map(mnf => {
-        // Harus semua item memiliki status 'loaded' atau 'issue' baru bisa diberangkatkan
         const isReadyToDispatch = mnf.items.length > 0 && mnf.items.every(i => i.status === 'loaded' || i.status === 'issue');
         
         return (
           <div key={mnf.id} className="bg-white rounded-2xl shadow-md overflow-hidden border border-slate-200 mb-6">
             <div className="bg-orange-500 text-white p-5 flex justify-between items-center">
               <h3 className="font-bold text-xl">{mnf.id}</h3>
-              {/* TOMBOL HAPUS MANIFEST DARI GUDANG */}
               <button onClick={() => handleDeleteManifestGudang(mnf.id)} className="bg-red-700 hover:bg-red-800 text-white p-2 rounded-lg transition" title="Hapus Manifest Dummy"><Trash2 size={18}/></button>
             </div>
             <div className="p-5 space-y-3">
@@ -1049,7 +1041,6 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
               ))}
             </div>
             <div className="p-5 bg-slate-50 border-t space-y-4">
-              {/* INPUT NAMA STAFF PENANGGUNG JAWAB (PIC) */}
               <div>
                 <label className="text-xs font-bold text-slate-600 block mb-1">Nama Staff Penanggung Jawab Muat (Wajib):</label>
                 <input type="text" placeholder="Cth: Budi & Yanto" className="w-full border-2 border-slate-300 p-3 rounded-lg outline-none focus:border-orange-500 font-bold" value={picStaff[mnf.id] || ''} onChange={e => setPicStaff({...picStaff, [mnf.id]: e.target.value})} />
@@ -1063,10 +1054,7 @@ function GudangView({ manifests, addNotification, showToast, refreshData }) {
   );
 }
 
-// ==========================================
-// 4. DRIVER VIEW
-// ==========================================
-function DriverView({ manifests, activeDriver, showToast, refreshData }) {
+function DriverView({ manifests, activeDriver, showToast, refreshData, confirmAction }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [catatanText, setCatatanText] = useState('');
   const [inputUangDiterima, setInputUangDiterima] = useState('');
@@ -1157,10 +1145,10 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
     
     if (newStatus === 'delivered') {
       if (!fotoResi || !fotoBarang) {
-        return alert("GAGAL! Anda WAJIB mengambil Foto Resi dan Foto Barang sebelum menyelesaikan tugas.");
+        return showToast("GAGAL! Anda WAJIB mengambil Foto Resi dan Foto Barang sebelum menyelesaikan tugas.", "error");
       }
       if (isCOD && (!inputUangDiterima || !fotoBayar)) {
-        return alert("GAGAL! Tugas COD WAJIB menyertakan Nominal Uang dan Foto Bukti Pembayaran (Uang/Transfer).");
+        return showToast("GAGAL! Tugas COD WAJIB menyertakan Nominal Uang dan Foto Bukti Pembayaran (Uang/Transfer).", "error");
       }
     }
 
@@ -1177,6 +1165,20 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
       showToast("Mengunggah data & foto...", "success");
       await fetch(`${supabaseUrl}/items?id=eq.${itemId}`, { method: 'PATCH', headers, body: JSON.stringify(updatePayload) });
       
+      // JIKA RETUR, KLONING KEMBALI KE BARANG DOORING
+      if (newStatus === 'returned') {
+        const dbId = `ITM-${Date.now().toString().slice(-6)}${Math.floor(Math.random()*1000)}`;
+        const clonedItem = {
+          id: dbId, manifest_id: null, resi_manual: selectedItem.item.resi_manual,
+          pengirim: selectedItem.item.pengirim, penerima: selectedItem.item.penerima,
+          alamat: selectedItem.item.alamat, kota_asal: selectedItem.item.kotaAsal,
+          kota_tujuan: selectedItem.item.kotaTujuan, pembayaran: selectedItem.item.pembayaran,
+          nominal_cod: selectedItem.item.nominalCOD, nominal_diterima: 0, koli: selectedItem.item.koli,
+          berat: selectedItem.item.berat, kubik: 0, status: 'menunggu_jadwal'
+        };
+        await fetch(`${supabaseUrl}/items`, { method: 'POST', headers, body: JSON.stringify([clonedItem]) });
+      }
+
       const originalMnf = manifests.find(m => m.id === manifestId);
       const otherItems = originalMnf.items.filter(it => it.id !== itemId);
       const isLastItem = otherItems.every(it => ['delivered', 'returned', 'issue'].includes(it.status));
@@ -1188,7 +1190,7 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
       setSelectedItem(null); setCatatanText(''); setInputUangDiterima(''); setFotoResi(null); setFotoBarang(null); setFotoBayar(null);
       refreshData();
       showToast("Laporan Selesai & Terkirim ke Admin Resi!");
-    } catch (err) { alert("Gagal koneksi ke Cloud."); }
+    } catch (err) { showToast("Gagal koneksi ke Cloud.", "error"); }
   };
 
   const getPaymentColor = (pembayaran) => {
@@ -1268,16 +1270,14 @@ function DriverView({ manifests, activeDriver, showToast, refreshData }) {
   );
 }
 
-// ==========================================
-// UTILS COMPONENTS
-// ==========================================
 function StatusBadge({ status }) {
   const styles = { loading: 'bg-yellow-100 text-yellow-800 border-yellow-200', on_delivery: 'bg-[#e0f2fe] text-[#0369a1] border-[#bae6fd]', completed: 'bg-green-100 text-green-800 border-green-200' };
   const labels = { loading: 'Proses Muat', on_delivery: 'Dalam Perjalanan', completed: 'Selesai' };
   return <span className={`text-[11px] font-bold px-3 py-1.5 rounded-md border uppercase tracking-wider print:border-black print:bg-transparent print:text-black ${styles[status]}`}>{labels[status]}</span>;
 }
+
 function ItemStatusBadge({ status }) {
   const styles = { pending: 'bg-slate-100 text-slate-600', loaded: 'bg-yellow-100 text-yellow-700', delivered: 'bg-green-100 text-green-800', returned: 'bg-red-100 text-red-800', issue: 'bg-red-600 text-white', menunggu_jadwal: 'bg-purple-100 text-purple-700 border border-purple-200' };
-  const labels = { pending: 'Di Gudang', loaded: 'Di Truk', delivered: 'Terkirim', returned: 'Retur', issue: 'Barang Kurang', menunggu_jadwal: 'Belum Masuk Truk' };
+  const labels = { pending: 'Di Gudang', loaded: 'Di Truk', delivered: 'Terkirim', returned: 'Retur', issue: 'Barang Kurang', menunggu_jadwal: 'Barang Dooring' };
   return <span className={`text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wider print:border print:border-black print:bg-transparent print:text-black ${styles[status]}`}>{labels[status]}</span>;
 }
